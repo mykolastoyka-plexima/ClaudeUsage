@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0.2" y1="0" x2="0.8" y2="1">
+      <stop offset="0" stop-color="#34322F"/>
+      <stop offset="1" stop-color="#191816"/>
+    </linearGradient>
+    <radialGradient id="sheen" cx="0.28" cy="0.1" r="0.95">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.16"/>
+      <stop offset="0.55" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E9E3D8"/>
+    </linearGradient>
+  </defs>
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#bg)"/>
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="url(#sheen)"/>
+  <rect x="65.5" y="65.5" width="893" height="893" rx="206.5" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="3"/>
+  <g transform="translate(22 40)" fill="none" stroke="url(#ink)" stroke-width="88" stroke-linecap="round" stroke-linejoin="round">
+    <!-- C -->
+    <path d="M428.4 441.1 A150 150 0 1 0 428.4 638.9"/>
+    <!-- U -->
+    <path d="M566 420 V615 A92 92 0 0 0 750 615 V420"/>
+  </g>
+  <!-- Spark, top right of the U -->
+  <g transform="translate(838 304) scale(0.86)" stroke="#D97757" stroke-width="30" stroke-linecap="round">
+    <line x1="0" y1="-76" x2="0" y2="76"/>
+    <line x1="-76" y1="0" x2="76" y2="0"/>
+    <line x1="-54" y1="-54" x2="54" y2="54"/>
+    <line x1="-54" y1="54" x2="54" y2="-54"/>
+  </g>
+</svg>

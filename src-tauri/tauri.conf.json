@@ -1,0 +1,67 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ClaudeUsage",
+  "mainBinaryName": "ClaudeUsage",
+  "version": "0.1.0",
+  "identifier": "com.mykola.claudeusage",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "popover",
+        "title": "ClaudeUsage",
+        "url": "index.html",
+        "width": 340,
+        "height": 460,
+        "decorations": false,
+        "transparent": true,
+        "visible": false,
+        "skipTaskbar": true,
+        "alwaysOnTop": true,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "shadow": true,
+        "focus": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost ws://localhost:1420"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "publisher": "Mykola",
+    "category": "Utility",
+    "shortDescription": "Spotřeba Claude předplatného v systémové liště",
+    "longDescription": "ClaudeUsage ukazuje v systémové liště aktuální využití 5hodinové session a týdenních limitů Claude předplatného. Běží lokálně, bez telemetrie.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "installMode": "currentUser",
+        "languages": ["Czech", "English"],
+        "displayLanguageSelector": false
+      },
+      "wix": {
+        "language": "cs-CZ"
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "claude-fetcher",
+  "description": "Hidden claude.ai webview may only report the usage response back",
+  "windows": ["fetcher"],
+  "remote": { "urls": ["https://claude.ai/*"] },
+  "permissions": ["allow-usage-report"]
+}
