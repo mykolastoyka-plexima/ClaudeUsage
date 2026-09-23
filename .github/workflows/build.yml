@@ -17,16 +17,19 @@ jobs:
       matrix:
         include:
           - name: macOS (universal)
+            id: macos-universal
             os: macos-latest
             rust_targets: aarch64-apple-darwin,x86_64-apple-darwin
             args: --target universal-apple-darwin --bundles dmg
             out: src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
           - name: Windows x64
+            id: windows-x64
             os: windows-latest
             rust_targets: x86_64-pc-windows-msvc
             args: --target x86_64-pc-windows-msvc --bundles nsis
             out: src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
           - name: Windows ARM64
+            id: windows-arm64
             os: windows-latest
             rust_targets: aarch64-pc-windows-msvc
             args: --target aarch64-pc-windows-msvc --bundles nsis
@@ -50,7 +53,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
-          key: ${{ matrix.rust_targets }}
+          key: ${{ matrix.id }}
 
       - run: npm ci
 
@@ -64,7 +67,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: ClaudeUsage-${{ matrix.rust_targets }}
+          name: ClaudeUsage-${{ matrix.id }}
           path: ${{ matrix.out }}
           if-no-files-found: error
 
