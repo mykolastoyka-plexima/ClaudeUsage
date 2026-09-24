@@ -128,7 +128,18 @@ Chování na macOS:
 - Ikona je monochromatická template ikona (kroužek), takže ladí se světlým i tmavým menu barem. Procento session je jako text vedle ní. Od 80 % se kroužek barví oranžově, nad 95 % červeně.
 - Popover má nativní vibrancy (`NSVisualEffectView`, materiál Popover) a zaoblení 14 px.
 
-**Nepodepsaná aplikace:** bez Apple Developer podpisu a notarizace macOS při prvním spuštění hlásí, že aplikaci nelze ověřit. Otevřeš ji přes pravé tlačítko na `ClaudeUsage.app` → *Otevřít* → *Otevřít*, nebo v *Nastavení systému → Soukromí a zabezpečení → Přesto otevřít*.
+**Nenotarizovaná aplikace:** build má jen ad-hoc podpis (`signingIdentity: "-"`), ne Apple Developer ID. macOS proto při prvním spuštění hlásí, že aplikaci nelze ověřit:
+
+1. Přetáhni `ClaudeUsage.app` z `.dmg` do *Aplikací* a zkus ji spustit.
+2. Otevři *Nastavení systému → Soukromí a zabezpečení*, sjeď dolů a klikni na **Přesto otevřít**. Na macOS 15 a novějším už nefunguje pravé tlačítko → *Otevřít*.
+
+Pokud macOS hlásí, že je aplikace **„poškozená“**, jde o příznak karantény po stažení. Odstraníš ho v Terminálu:
+
+```bash
+xattr -cr /Applications/ClaudeUsage.app
+```
+
+Po spuštění aplikace nemá okno ani ikonu v Docku. Hledej kroužek s procentem v menu baru vpravo nahoře. Na MacBooku s výřezem ho může schovat plný menu bar. Při prvním spuštění se otevře okno pro přihlášení ke claude.ai.
 
 ## Kde jsou data aplikace
 
