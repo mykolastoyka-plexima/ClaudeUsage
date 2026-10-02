@@ -6,6 +6,7 @@
   "permissions": [
     "core:default",
     "allow-get-state",
+    "allow-get-history",
     "allow-refresh-now",
     "allow-set-settings",
     "allow-open-login",

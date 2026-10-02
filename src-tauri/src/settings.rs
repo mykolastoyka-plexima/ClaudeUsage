@@ -56,7 +56,7 @@ impl Settings {
 }
 
 /// Thresholds already notified, keyed by limit kind + reset window.
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct NotifyLog {
     pub fired: BTreeSet<String>,
 }

@@ -4,6 +4,18 @@ use chrono::{DateTime, Utc};
 use tauri::AppHandle;
 use tauri_plugin_notification::NotificationExt;
 
+/// A notification decided under the state lock but shown after it is released.
+pub struct Pending {
+    title: &'static str,
+    body: String,
+}
+
+pub fn show(app: &AppHandle, pending: Vec<Pending>) {
+    for p in pending {
+        let _ = app.notification().builder().title(p.title).body(p.body).show();
+    }
+}
+
 const THRESHOLDS: [u32; 2] = [80, 95];
 
 /// Stable id of a limit's current window. `resets_at` carries sub-second noise,
@@ -14,9 +26,10 @@ fn window_key(l: &Limit) -> Option<(String, i64)> {
     Some((format!("{}@{}", l.kind, rounded), rounded))
 }
 
-/// Fires at most one notification per limit window and threshold. Returns true
-/// when the log changed and should be persisted.
-pub fn check(app: &AppHandle, snap: &Snapshot, log: &mut NotifyLog, enabled: bool) -> bool {
+/// Decides at most one notification per limit window and threshold. Returns
+/// whether the log changed (and should be persisted) plus what to show.
+pub fn check(snap: &Snapshot, log: &mut NotifyLog, enabled: bool) -> (bool, Vec<Pending>) {
+    let mut out = Vec::new();
     let now = Utc::now().timestamp();
     let before = log.fired.len();
     // Forget windows that have already reset.
@@ -44,10 +57,10 @@ pub fn check(app: &AppHandle, snap: &Snapshot, log: &mut NotifyLog, enabled: boo
                 None => format!("{}: {:.0} %", l.label, l.percent),
             };
             let title = if top >= 95 { "Limit je téměř vyčerpán" } else { "Blížíš se limitu" };
-            let _ = app.notification().builder().title(title).body(body).show();
+            out.push(Pending { title, body });
         }
     }
-    changed
+    (changed, out)
 }
 
 /// "so 7:00 (za 2 d 14 h)" in local time, rounded to the nearest minute.

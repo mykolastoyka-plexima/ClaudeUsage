@@ -42,3 +42,11 @@ export interface AppState {
   vibrancy: boolean;
   refreshing: boolean;
 }
+
+export interface HistorySample {
+  t: number;
+  s: number | null;
+  sr: number | null;
+  w: number | null;
+  wr: number | null;
+}

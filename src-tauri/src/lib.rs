@@ -1,4 +1,5 @@
 mod fetcher;
+mod history;
 mod model;
 mod notify;
 mod popover;
@@ -61,6 +62,10 @@ struct StateDto {
     refreshing: bool,
 }
 
+/// Never hold this guard across a Tauri API call (tray, window, webview, emit):
+/// from a worker thread those block until the main thread runs them, and the
+/// main thread itself takes this lock in IPC handlers and page-load callbacks,
+/// so holding it there deadlocks the whole app.
 fn core(app: &AppHandle) -> std::sync::MutexGuard<'_, Core> {
     app.state::<Mutex<Core>>().inner().lock().unwrap()
 }
@@ -119,6 +124,9 @@ pub(crate) fn refresh(app: &AppHandle) {
 fn finish(app: &AppHandle, report: fetcher::Report) {
     let mut open_login = false;
     let mut signed_in = false;
+    let mut notifications = Vec::new();
+    let mut notify_log_to_save = None;
+    let mut sample = None;
     {
         let mut guard = core(app);
         let c = &mut *guard;
@@ -131,9 +139,12 @@ fn finish(app: &AppHandle, report: fetcher::Report) {
             fetcher::Report::Ok { body, .. } => {
                 match serde_json::from_str(&body).ok().and_then(|v| model::parse(&v)) {
                     Some(snap) => {
-                        if notify::check(app, &snap, &mut c.notify_log, c.settings.notifications) {
-                            settings::save_notify_log(app, &c.notify_log);
+                        let (changed, pending) = notify::check(&snap, &mut c.notify_log, c.settings.notifications);
+                        if changed {
+                            notify_log_to_save = Some(c.notify_log.clone());
                         }
+                        notifications = pending;
+                        sample = Some(history::Sample::from_snapshot(&snap));
                         c.snapshot = Some(snap);
                         c.status = Status::Online;
                         c.updated_at = Some(chrono::Utc::now().timestamp_millis());
@@ -162,6 +173,13 @@ fn finish(app: &AppHandle, report: fetcher::Report) {
             }
         }
     }
+    if let Some(log) = notify_log_to_save {
+        settings::save_notify_log(app, &log);
+    }
+    if let Some(s) = sample {
+        history::record(app, s);
+    }
+    notify::show(app, notifications);
     publish(app);
     if signed_in {
         if let Some(w) = app.get_webview_window(fetcher::LOGIN) {
@@ -175,10 +193,19 @@ fn finish(app: &AppHandle, report: fetcher::Report) {
 
 fn update_tray(app: &AppHandle) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else { return };
-    let c = core(app);
-    let session = c.snapshot.as_ref().and_then(|s| s.session().cloned());
-    let weekly = c.snapshot.as_ref().and_then(|s| s.weekly().cloned());
-    let (percent, tone) = match (&c.status, &session) {
+    // Copy what we need and release the lock before touching the tray (see `core`).
+    let (status, session, weekly, tray_style) = {
+        let c = core(app);
+        (
+            c.status,
+            c.snapshot.as_ref().and_then(|s| s.session().cloned()),
+            c.snapshot.as_ref().and_then(|s| s.weekly().cloned()),
+            c.settings.tray_style,
+        )
+    };
+    #[cfg(target_os = "macos")]
+    let _ = tray_style;
+    let (percent, tone) = match (&status, &session) {
         (Status::LoggedOut, _) | (_, None) => (None, Tone::Muted),
         (Status::Offline, Some(s)) => (Some(s.percent), Tone::Muted),
         (_, Some(s)) => (Some(s.percent), tray_icon::tone_for(s.percent)),
@@ -197,7 +224,7 @@ fn update_tray(app: &AppHandle) {
     {
         let size = tray_icon::system_icon_size();
         let light = tray_icon::taskbar_is_light();
-        let rgba = match c.settings.tray_style {
+        let rgba = match tray_style {
             TrayStyle::Number => tray_icon::render_number(size, percent, tone, light),
             TrayStyle::Ring => tray_icon::render(size, percent, tone, light),
         };
@@ -205,7 +232,7 @@ fn update_tray(app: &AppHandle) {
     }
 
     let mut tip = String::from("ClaudeUsage");
-    match c.status {
+    match status {
         Status::LoggedOut => tip.push_str("\nOdhlášeno"),
         Status::Loading if session.is_none() => tip.push_str("\nNačítám…"),
         _ => {
@@ -221,7 +248,7 @@ fn update_tray(app: &AppHandle) {
                     tip.push_str(&format!(" · reset {when}"));
                 }
             }
-            if c.status == Status::Offline {
+            if status == Status::Offline {
                 tip.push_str("\nOffline");
             }
         }
@@ -253,6 +280,12 @@ fn usage_report(webview: tauri::Webview, app: AppHandle, report: fetcher::Report
 #[tauri::command]
 fn get_state(app: AppHandle) -> StateDto {
     dto(&core(&app))
+}
+
+#[tauri::command]
+fn get_history(app: AppHandle, hours: f64) -> Vec<history::Sample> {
+    let span = (hours.clamp(1.0, 24.0 * 40.0) * 3_600_000.0) as i64;
+    history::since(&app, chrono::Utc::now().timestamp_millis() - span)
 }
 
 #[tauri::command]
@@ -397,6 +430,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(Mutex::new(popover::PopoverState::default()))
         .manage(Scheduler(Arc::new(Notify::new())))
+        .manage(history::Store::default())
         .setup(|app| {
             // Menu bar app: no Dock icon, no app switcher entry.
             #[cfg(target_os = "macos")]
@@ -438,6 +472,7 @@ pub fn run() {
                 });
             }
 
+            history::load(&handle);
             build_tray(&handle)?;
             spawn_scheduler(&handle);
             refresh(&handle);
@@ -446,6 +481,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             usage_report,
             get_state,
+            get_history,
             refresh_now,
             set_settings,
             open_login,

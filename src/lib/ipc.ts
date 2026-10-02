@@ -1,4 +1,4 @@
-import type { AppState, Limit, Settings, Snapshot } from "./types";
+import type { AppState, HistorySample, Limit, Settings, Snapshot } from "./types";
 
 export const isTauri = "__TAURI_INTERNALS__" in window;
 
@@ -6,6 +6,7 @@ type Listener = (s: AppState) => void;
 
 export interface Backend {
   getState(): Promise<AppState>;
+  getHistory(hours: number): Promise<HistorySample[]>;
   onState(fn: Listener): void;
   onShown(fn: () => void): void;
   refresh(): Promise<void>;
@@ -22,6 +23,7 @@ async function tauriBackend(): Promise<Backend> {
   const { listen } = await import("@tauri-apps/api/event");
   return {
     getState: () => invoke<AppState>("get_state"),
+    getHistory: (hours) => invoke<HistorySample[]>("get_history", { hours }),
     onState: (fn) => void listen<AppState>("state", (e) => fn(e.payload)),
     onShown: (fn) => void listen("popover-shown", () => fn()),
     refresh: () => invoke("refresh_now"),
@@ -66,8 +68,10 @@ function mockBackend(): Backend {
     refreshing: status === "loading",
   };
   const emit = () => listeners.forEach((l) => l(state));
+  const history = q.get("h") === "0" ? [] : mockHistory(Number(q.get("days") ?? 35));
   return {
     getState: async () => state,
+    getHistory: async (hours) => history.filter((s) => s.t >= Date.now() - hours * 3_600_000),
     onState: (fn) => void listeners.push(fn),
     onShown: () => {},
     refresh: async () => {
@@ -90,4 +94,31 @@ function mockBackend(): Backend {
 
 export async function backend(): Promise<Backend> {
   return isTauri ? tauriBackend() : mockBackend();
+}
+
+/** Plausible fake samples every 15 min: daytime work in 5 h sessions, weekly reset on Saturdays 7:00. */
+function mockHistory(days: number): HistorySample[] {
+  const out: HistorySample[] = [];
+  const now = Date.now();
+  let rnd = 7;
+  const rand = () => ((rnd = (rnd * 16807) % 2147483647) / 2147483647);
+  let w = 0;
+  let wr = 0;
+  let s = 0;
+  let sr = 0;
+  for (let t = now - days * 86_400_000; t <= now; t += 15 * 60_000) {
+    const d = new Date(t);
+    const sat7 = new Date(d.getFullYear(), d.getMonth(), d.getDate() + ((6 - d.getDay() + 7) % 7), 7).getTime();
+    const nextWeekly = sat7 > t ? sat7 : sat7 + 7 * 86_400_000;
+    if (nextWeekly !== wr) ((wr = nextWeekly), (w = 0));
+    const working = d.getDay() > 0 && d.getDay() < 6 && d.getHours() >= 8 && d.getHours() < 19;
+    if (t >= sr) ((s = 0), (sr = working ? t + 5 * 3_600_000 : 0));
+    if (working && sr && rand() < 0.45) {
+      const inc = Math.round(rand() * 4);
+      s = Math.min(100, s + inc * 3);
+      w = Math.min(100, w + inc * 0.5);
+    }
+    out.push({ t, s: Math.round(s), sr: sr ? Math.floor(sr / 1000) : null, w: Math.round(w), wr: Math.floor(wr / 1000) });
+  }
+  return out;
 }

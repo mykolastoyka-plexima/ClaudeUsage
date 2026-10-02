@@ -120,6 +120,7 @@ pub fn render(size: u32, percent: Option<f64>, tone: Tone, light_taskbar: bool) 
 /// macOS menu bar: ring only, the percentage goes into the tray title next to it.
 /// Normal states are template images, so macOS tints them for light and dark menu
 /// bars; warning and critical states are deliberately coloured. Returns (rgba, is_template).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn render_macos(size: u32, percent: Option<f64>, tone: Tone) -> (Vec<u8>, bool) {
     let mut pm = Pixmap::new(size, size).expect("icon size");
     let s = size as f32;

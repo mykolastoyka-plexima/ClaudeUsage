@@ -34,6 +34,8 @@
   --accent-hover: #4c4cc8;
   --accent-soft: rgba(91, 91, 214, 0.11);
   --on-accent: #ffffff;
+  /* Chart mark: validated L 0.43–0.77 and ≥ 3:1 against the card. */
+  --chart: #5b5bd6;
 
   --ok: #16965a;
   --ok-2: #3ccf85;
@@ -74,6 +76,7 @@
     --accent-hover: #9d9df8;
     --accent-soft: rgba(138, 138, 245, 0.14);
     --on-accent: #16162e;
+  --chart: #7c7cf0;
 
     --ok: #3fae76;
     --ok-2: #72d3a2;
@@ -114,6 +117,7 @@
   --accent-hover: #9d9df8;
   --accent-soft: rgba(138, 138, 245, 0.14);
   --on-accent: #16162e;
+  --chart: #7c7cf0;
 
   --ok: #3fae76;
   --ok-2: #72d3a2;

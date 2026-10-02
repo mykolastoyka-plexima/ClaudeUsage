@@ -5,6 +5,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "usage_report",
             "get_state",
+            "get_history",
             "refresh_now",
             "set_settings",
             "open_login",

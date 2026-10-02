@@ -5,6 +5,7 @@ Malá aplikace do systémové lišty, která ukazuje spotřebu Claude předplatn
 - Ikona v liště: procento aktuální session, buď jako velké barevné číslo (výchozí, nejlépe čitelné), nebo jako kroužek s číslem. Barva je zelená do 80 %, oranžová mezi 80 a 95 % a červená nad 95 %, laděná zvlášť pro světlou a tmavou lištu. Tooltip ukazuje session i týden s odpočtem do resetu.
 - Popover po kliknutí: velký ukazatel session, týdenní limit s datem a odpočtem resetu a menší řádky s dalšími limity (jen pokud jsou v datech).
 - Rozložení Normální / Kompaktní, vzhled Auto / Světlý / Tmavý, obnova po 1, 3, 5, 10 nebo 15 minutách.
+- Graf historie spotřeby (dnes, 24 h, 3 dny, týden, měsíc) pro týdenní limit nebo session. claude.ai historii neposkytuje, takže ji aplikace ukládá sama při každé obnově. Graf tedy obsahuje data jen z doby, kdy aplikace běžela.
 - Notifikace při 80 % a 95 %, vždy jen jednou za každé resetovací okno.
 - Spouštění po přihlášení do systému.
 - **Bez telemetrie a bez externích serverů.** Aplikace komunikuje jen s `claude.ai`, stejně jako oficiální stránka.
@@ -146,6 +147,7 @@ Po spuštění aplikace nemá okno ani ikonu v Docku. Hledej kroužek s procente
 | Co | Kde |
 |---|---|
 | Nastavení | Windows: `%APPDATA%\com.mykola.claudeusage\settings.json`, macOS: `~/Library/Application Support/com.mykola.claudeusage/settings.json` |
+| Historie spotřeby (35 dní) | Windows: `%APPDATA%\com.mykola.claudeusage\history.jsonl`, macOS: `~/Library/Application Support/com.mykola.claudeusage/history.jsonl` |
 | Záznam odeslaných notifikací | `%APPDATA%\com.mykola.claudeusage\notified.json` |
 | Profil WebView2 (přihlášení) | `%LOCALAPPDATA%\com.mykola.claudeusage\EBWebView` |
 

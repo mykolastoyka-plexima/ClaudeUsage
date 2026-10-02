@@ -1,7 +1,9 @@
-import { ChevronLeft, Circle, Clock, Hash, LogIn, LogOut, Monitor, Moon, PanelTop, Power, RefreshCw, Rows2, Settings as SettingsIcon, Sun, WifiOff } from "lucide";
+import { ChartColumn, ChevronLeft, Circle, Clock, Hash, LogIn, LogOut, Monitor, Moon, PanelTop, Power, RefreshCw, Rows2, Settings as SettingsIcon, Sun, WifiOff } from "lucide";
 import logoUrl from "./logo.png";
 import { backend, isTauri, type Backend } from "./lib/ipc";
 import { h, icon, tweenNumber } from "./lib/dom";
+import { segmented } from "./lib/segmented";
+import { buildHistoryPanel, type HistoryPanel } from "./history-panel";
 import { countdown, money, resetDate, toneFor, updatedAgo, type Tone } from "./lib/format";
 import type { AppState, Density, Limit, Settings, ThemePref, TrayStyle } from "./lib/types";
 
@@ -10,11 +12,15 @@ const root = document.documentElement;
 const appEl = document.getElementById("app") as HTMLElement;
 const mainEl = document.getElementById("panel-main") as HTMLElement;
 const settingsEl = document.getElementById("panel-settings") as HTMLElement;
+const historyEl = document.getElementById("panel-history") as HTMLElement;
+const panels = { main: mainEl, settings: settingsEl, history: historyEl };
+type PanelId = keyof typeof panels;
 
 let be: Backend;
 let state: AppState;
 let mode = "";
-let settingsOpen = false;
+let current: PanelId = "main";
+let historyPanel: HistoryPanel;
 let switching = false;
 const shown = { session: 0, weekly: 0 };
 
@@ -76,7 +82,8 @@ function footer(): HTMLElement {
       "div",
       { class: "tools" },
       h("button", { class: "icon-btn", id: "btn-refresh", title: "Obnovit", "aria-label": "Obnovit", onclick: () => void be.refresh() }, icon(RefreshCw)),
-      h("button", { class: "icon-btn", title: "Nastavení", "aria-label": "Nastavení", onclick: () => setPanel(true) }, icon(SettingsIcon)),
+      h("button", { class: "icon-btn", title: "Historie", "aria-label": "Historie spotřeby", onclick: () => setPanel("history") }, icon(ChartColumn)),
+      h("button", { class: "icon-btn", title: "Nastavení", "aria-label": "Nastavení", onclick: () => setPanel("settings") }, icon(SettingsIcon)),
     ),
   );
 }
@@ -339,28 +346,6 @@ function renderTimes(): void {
 
 // ------------------------------------------------------------------ settings panel
 
-function segmented<T extends string | number>(
-  options: { value: T; label: string; icon?: Parameters<typeof icon>[0] }[],
-  current: () => T,
-  onPick: (v: T) => void,
-): HTMLElement {
-  const thumb = h("div", { class: "thumb" });
-  const wrap = h("div", { class: "segmented", role: "group" }, thumb);
-  const buttons = options.map((o) =>
-    h("button", { type: "button", onclick: () => onPick(o.value) }, o.icon ? icon(o.icon, 13) : null, o.label),
-  );
-  wrap.append(...buttons);
-  const sync = () => {
-    const i = Math.max(0, options.findIndex((o) => o.value === current()));
-    thumb.style.width = `calc((100% - 4px) / ${options.length})`;
-    thumb.style.transform = `translateX(${i * 100}%)`;
-    buttons.forEach((b, j) => b.setAttribute("aria-pressed", String(i === j)));
-  };
-  (wrap as HTMLElement & { sync?: () => void }).sync = sync;
-  sync();
-  return wrap;
-}
-
 function toggleRow(title: string, sub: string, get: () => boolean, set: (v: boolean) => void): HTMLElement {
   const sw = h("button", { class: "switch", role: "switch", "aria-label": title, onclick: () => set(!get()) });
   const row = h("div", { class: "list-row" }, h("div", { class: "txt" }, h("div", { class: "t" }, title), h("div", { class: "s" }, sub)), sw);
@@ -425,7 +410,7 @@ function buildSettings(): void {
     h(
       "div",
       { class: "settings-head" },
-      h("button", { class: "icon-btn", "aria-label": "Zpět", title: "Zpět", onclick: () => setPanel(false) }, icon(ChevronLeft)),
+      h("button", { class: "icon-btn", "aria-label": "Zpět", title: "Zpět", onclick: () => setPanel("main") }, icon(ChevronLeft)),
       h("h1", {}, "Nastavení"),
     ),
     h("div", { class: "group-label" }, "Vzhled"),
@@ -444,7 +429,7 @@ function buildSettings(): void {
       { class: "card list" },
       h(
         "button",
-        { class: "list-row danger", id: "btn-logout", onclick: () => void be.logout().then(() => setPanel(false)) },
+        { class: "list-row danger", id: "btn-logout", onclick: () => void be.logout().then(() => setPanel("main")) },
         icon(LogOut, 15),
         h("div", { class: "txt" }, h("div", { class: "t" }, "Odhlásit se")),
       ),
@@ -460,23 +445,25 @@ function buildSettings(): void {
 // ------------------------------------------------------------------ panels + sizing
 
 function activePanel(): HTMLElement {
-  return settingsOpen ? settingsEl : mainEl;
+  return panels[current];
 }
 
 function syncHeight(): void {
   if (!switching) be.resize(Math.ceil(activePanel().offsetHeight));
 }
 
-function setPanel(open: boolean): void {
-  if (open === settingsOpen) return;
-  settingsOpen = open;
+function setPanel(id: PanelId): void {
+  if (id === current) return;
+  current = id;
+  if (id === "history") historyPanel.open();
   switching = true;
   const target = Math.ceil(activePanel().offsetHeight);
   const growing = target >= appEl.offsetHeight;
   if (growing) be.resize(target);
-  appEl.classList.toggle("show-settings", open);
-  mainEl.inert = open;
-  settingsEl.inert = !open;
+  for (const [k, p] of Object.entries(panels)) {
+    p.classList.toggle("is-active", k === id);
+    p.inert = k !== id;
+  }
   window.setTimeout(() => {
     switching = false;
     syncHeight();
@@ -491,10 +478,13 @@ async function main(): Promise<void> {
   applyTheme(state.settings.theme, false);
   root.classList.toggle("vibrant", state.vibrancy);
 
-  for (const p of [mainEl, settingsEl]) p.classList.add("is-absolute");
+  for (const p of Object.values(panels)) p.classList.add("is-absolute");
+  mainEl.classList.add("is-active");
   if (!isTauri) document.body.append(h("div", { class: "preview-badge" }, "Náhled designu · ukázková data"));
   settingsEl.inert = true;
+  historyEl.inert = true;
   buildSettings();
+  historyPanel = buildHistoryPanel(historyEl, be, () => setPanel("main"), () => syncHeight());
   renderMain();
   syncers.forEach((s) => s());
 
@@ -515,6 +505,7 @@ async function main(): Promise<void> {
 
   new ResizeObserver(syncHeight).observe(mainEl);
   new ResizeObserver(syncHeight).observe(settingsEl);
+  new ResizeObserver(syncHeight).observe(historyEl);
   syncHeight();
 
   // Countdowns and "updated ago" tick over at every minute boundary.
