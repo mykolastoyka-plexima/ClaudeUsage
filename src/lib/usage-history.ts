@@ -6,7 +6,10 @@ export type Metric = "weekly" | "session";
 export interface Bucket {
   start: number;
   end: number;
-  /** Percentage points of the limit consumed in this bucket. */
+  /**
+   * weekly: percentage points of the weekly limit consumed in this bucket.
+   * session: highest session utilisation seen in this bucket (0–100).
+   */
   value: number;
   /** Starts after now. */
   future: boolean;
@@ -16,9 +19,18 @@ export interface Bucket {
 
 export interface Series {
   range: Range;
+  metric: Metric;
   buckets: Bucket[];
+  /** weekly: consumption over the range. session: unused (0). */
   total: number;
   peak: Bucket | null;
+  /**
+   * weekly: average consumption per hour or day of sampled time.
+   * session: average peak utilisation of the sessions in range.
+   */
+  average: number | null;
+  averageUnit: "hour" | "day" | "session";
+  sessions: number;
   /** First sample available, if it starts inside the range (shorter history). */
   historyFrom: number | null;
 }
@@ -60,9 +72,10 @@ function boundaries(range: Range, now: number): number[] {
 }
 
 /**
- * Consumption between consecutive samples: the increase within one limit window,
- * or the whole new value when the window has reset in between. Attributed to the
- * bucket of the later sample.
+ * weekly: consumption between consecutive samples (the increase within one limit
+ * window, or the whole new value when the window reset in between), attributed to
+ * the bucket of the later sample.
+ * session: the highest session utilisation observed in each bucket.
  */
 export function buildSeries(samples: HistorySample[], range: Range, metric: Metric, now = Date.now()): Series {
   const edges = boundaries(range, now);
@@ -91,6 +104,7 @@ export function buildSeries(samples: HistorySample[], range: Range, metric: Metr
     if (b.t - a.t <= MAX_GAP) {
       for (let k = Math.max(0, find(a.t)); k >= 0 && k < buckets.length && buckets[k].start < b.t; k++) buckets[k].covered = true;
     }
+    if (metric === "session") continue;
     const vb = val(b);
     const va = val(a);
     if (vb == null || va == null || bi < 0) continue;
@@ -98,12 +112,35 @@ export function buildSeries(samples: HistorySample[], range: Range, metric: Metr
     buckets[bi].value += delta;
   }
 
-  const total = buckets.reduce((sum, b) => sum + b.value, 0);
+  // Session: per-bucket peak, plus each session window's own peak for the average.
+  const sessionPeaks = new Map<number, number>();
+  if (metric === "session") {
+    for (const s of samples) {
+      const bi = find(s.t);
+      if (bi < 0 || s.s == null) continue;
+      buckets[bi].value = Math.max(buckets[bi].value, s.s);
+      if (s.sr != null && s.s > 0) sessionPeaks.set(s.sr, Math.max(sessionPeaks.get(s.sr) ?? 0, s.s));
+    }
+  }
+
+  const total = metric === "weekly" ? buckets.reduce((sum, b) => sum + b.value, 0) : 0;
   const peak = buckets.reduce<Bucket | null>((p, b) => (b.value > 0 && (!p || b.value > p.value) ? b : p), null);
+
+  let average: number | null = null;
+  let averageUnit: Series["averageUnit"] = "session";
+  if (metric === "weekly") {
+    // Average over the time the app was actually sampling, so gaps don't dilute it.
+    const coveredMs = buckets.filter((b) => b.covered && !b.future).reduce((sum, b) => sum + (Math.min(b.end, now) - b.start), 0);
+    averageUnit = range === "today" || range === "24h" || coveredMs < 24 * H ? "hour" : "day";
+    const unitMs = averageUnit === "hour" ? H : 24 * H;
+    average = coveredMs > 0 ? total / (coveredMs / unitMs) : null;
+  } else if (sessionPeaks.size > 0) {
+    average = [...sessionPeaks.values()].reduce((a, b) => a + b, 0) / sessionPeaks.size;
+  }
   // `samples` includes the last one before the range when it exists, so a first
   // sample well inside the range means history simply starts later.
   const historyFrom = samples.length > 0 && samples[0].t > edges[0] + H ? samples[0].t : null;
-  return { range, buckets, total, peak, historyFrom };
+  return { range, metric, buckets, total, peak, average, averageUnit, sessions: sessionPeaks.size, historyFrom };
 }
 
 /** Rounds an axis maximum up to 1/2/5 × 10^k, at least 5. */

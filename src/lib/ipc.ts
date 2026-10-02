@@ -7,6 +7,7 @@ type Listener = (s: AppState) => void;
 export interface Backend {
   getState(): Promise<AppState>;
   getHistory(hours: number): Promise<HistorySample[]>;
+  version(): Promise<string>;
   onState(fn: Listener): void;
   onShown(fn: () => void): void;
   refresh(): Promise<void>;
@@ -24,6 +25,7 @@ async function tauriBackend(): Promise<Backend> {
   return {
     getState: () => invoke<AppState>("get_state"),
     getHistory: (hours) => invoke<HistorySample[]>("get_history", { hours }),
+    version: async () => (await import("@tauri-apps/api/app")).getVersion(),
     onState: (fn) => void listen<AppState>("state", (e) => fn(e.payload)),
     onShown: (fn) => void listen("popover-shown", () => fn()),
     refresh: () => invoke("refresh_now"),
@@ -71,6 +73,7 @@ function mockBackend(): Backend {
   const history = q.get("h") === "0" ? [] : mockHistory(Number(q.get("days") ?? 35));
   return {
     getState: async () => state,
+    version: async () => "náhled",
     getHistory: async (hours) => history.filter((s) => s.t >= Date.now() - hours * 3_600_000),
     onState: (fn) => void listeners.push(fn),
     onShown: () => {},

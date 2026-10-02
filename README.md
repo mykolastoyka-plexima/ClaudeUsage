@@ -78,8 +78,8 @@ npm run tauri build
 
 Výstupy:
 
-- NSIS instalátor (`.exe`): `src-tauri/target/release/bundle/nsis/ClaudeUsage_0.1.0_<arch>-setup.exe`
-- MSI (`.msi`): `src-tauri/target/release/bundle/msi/ClaudeUsage_0.1.0_<arch>_cs-CZ.msi`
+- NSIS instalátor (`.exe`): `src-tauri/target/release/bundle/nsis/ClaudeUsage_0.2.0_<arch>-setup.exe`
+- MSI (`.msi`): `src-tauri/target/release/bundle/msi/ClaudeUsage_0.2.0_<arch>_cs-CZ.msi`
 
 Build pro konkrétní architekturu:
 
@@ -111,7 +111,7 @@ Poznámky:
 **GitHub Actions:** workflow [`.github/workflows/build.yml`](.github/workflows/build.yml) sestaví universal `.dmg` (Apple Silicon + Intel) a oba Windows `.exe`.
 
 - Ručně: záložka *Actions* → *Build* → *Run workflow*. Instalátory pak najdeš v sekci *Artifacts* daného běhu.
-- Tagem: `git tag v0.1.0 && git push --tags` vytvoří koncept (draft) GitHub release s přiloženými instalátory.
+- Tagem: `git tag v0.2.0 && git push --tags` vytvoří koncept (draft) GitHub release s přiloženými instalátory.
 
 **Na vlastním Macu** (Xcode Command Line Tools, Node, Rust):
 
@@ -121,7 +121,7 @@ npm install
 npm run tauri build -- --target universal-apple-darwin --bundles dmg
 ```
 
-Výstup: `src-tauri/target/universal-apple-darwin/release/bundle/dmg/ClaudeUsage_0.1.0_universal.dmg`
+Výstup: `src-tauri/target/universal-apple-darwin/release/bundle/dmg/ClaudeUsage_0.2.0_universal.dmg`
 
 Chování na macOS:
 
@@ -141,6 +141,18 @@ xattr -cr /Applications/ClaudeUsage.app
 ```
 
 Po spuštění aplikace nemá okno ani ikonu v Docku. Hledej kroužek s procentem v menu baru vpravo nahoře. Na MacBooku s výřezem ho může schovat plný menu bar. Při prvním spuštění se otevře okno pro přihlášení ke claude.ai.
+
+## Verze a aktualizace
+
+Nová verze se nainstaluje přes starou: instalátor ji rozpozná a nahradí. Nastavení, přihlášení i historie zůstanou zachované. Instalátor sám neaktualizuje, novou verzi je potřeba stáhnout a spustit.
+
+Při vydání nové verze zvyš číslo na třech místech (musí se shodovat):
+
+- `package.json` → `"version"`
+- `src-tauri/Cargo.toml` → `version`
+- `src-tauri/tauri.conf.json` → `"version"`
+
+Aplikace zobrazuje verzi v patičce Nastavení, čte ji z `tauri.conf.json`.
 
 ## Kde jsou data aplikace
 

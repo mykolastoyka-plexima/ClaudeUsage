@@ -1,6 +1,6 @@
 [package]
 name = "claudeusage"
-version = "0.1.0"
+version = "0.2.0"
 description = "ClaudeUsage – spotřeba Claude předplatného v systémové liště"
 authors = ["Mykola"]
 edition = "2021"

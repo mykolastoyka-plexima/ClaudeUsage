@@ -43,6 +43,16 @@ function pct(v: number): string {
   return `${Math.round(v)} %`;
 }
 
+const dec = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 });
+/** One decimal below 10 so small hourly averages don't all read as "0 %". */
+function avgPct(v: number): string {
+  return `${v < 10 ? dec.format(v) : Math.round(v)} %`;
+}
+
+function sessionsWord(n: number): string {
+  return n === 1 ? "session" : "sessions";
+}
+
 function bucketLabel(b: Bucket, range: Range): string {
   const s = new Date(b.start);
   const e = new Date(b.end);
@@ -157,23 +167,35 @@ export function buildHistoryPanel(root: HTMLElement, be: Backend, onBack: () => 
   }
 
   function chart(series: Series): Node[] {
-    const unit = metric === "weekly" ? "týdenního limitu" : "session limitu (součet)";
+    const weekly = series.metric === "weekly";
+    const unit = weekly ? "týdenního limitu" : "vytížení session";
+    const avgText = series.average == null ? "–" : weekly ? `Ø ${avgPct(series.average)}` : pct(series.average);
+    const avgUnit = weekly
+      ? ` týdenního limitu za ${series.averageUnit === "hour" ? "hodinu" : "den"}`
+      : " průměrná session";
+    const peakAt = series.peak ? bucketLabel(series.peak, range) : null;
+    const detail = weekly
+      ? [`Celkem ${pct(series.total)}`, peakAt && `nejvíc ${peakAt}`].filter(Boolean).join(" · ")
+      : series.sessions > 0
+        ? [`${series.sessions} ${sessionsWord(series.sessions)}`, peakAt && `nejvyšší ${peakAt}`].filter(Boolean).join(" · ")
+        : "Za období žádná session";
     const stat = h(
       "div",
       { class: "chart-stat" },
-      h("div", {}, h("span", { class: "chart-total" }, pct(series.total)), h("span", { class: "chart-unit" }, ` ${unit}`)),
-      h("div", { class: "chart-peak" }, series.peak ? `Nejvíc ${bucketLabel(series.peak, range)}` : "Za období bez spotřeby"),
+      h("div", {}, h("span", { class: "chart-total" }, avgText), h("span", { class: "chart-unit" }, avgUnit)),
+      h("div", { class: "chart-peak" }, weekly && series.total === 0 ? "Za období bez spotřeby" : detail),
     );
 
     const n = series.buckets.length;
     const plotW = W - PAD.l - PAD.r;
     const plotH = HGT - PAD.t - PAD.b;
-    const max = niceMax(series.peak?.value ?? 0);
+    // Session peaks live on a fixed 0–100 % scale.
+    const max = weekly ? niceMax(series.peak?.value ?? 0) : 100;
     const slot = plotW / n;
     const bw = Math.max(2, Math.min(24, slot - 2));
     const y = (v: number) => PAD.t + plotH - (v / max) * plotH;
 
-    const svg = el("svg", { viewBox: `0 0 ${W} ${HGT}`, class: "chart", role: "img", "aria-label": `Spotřeba ${unit}, celkem ${pct(series.total)}` });
+    const svg = el("svg", { viewBox: `0 0 ${W} ${HGT}`, class: "chart", role: "img", "aria-label": `${weekly ? "Spotřeba" : "Nejvyšší"} ${unit}, ${avgText}${avgUnit}` });
     // Integer ticks only; a half tick like 2.5 % reads as noise.
     for (const v of Number.isInteger(max / 2) ? [0, max / 2, max] : [0, max]) {
       const gy = Math.round(y(v)) + 0.5;

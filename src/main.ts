@@ -435,7 +435,7 @@ function buildSettings(): void {
       ),
       h("button", { class: "list-row", onclick: () => be.quit() }, icon(Power, 15), h("div", { class: "txt" }, h("div", { class: "t" }, "Ukončit ClaudeUsage"))),
     ),
-    h("div", { class: "about" }, "ClaudeUsage 0.1.0 · běží lokálně, bez telemetrie"),
+    h("div", { class: "about", id: "about" }, "ClaudeUsage · běží lokálně, bez telemetrie"),
   );
   syncers.push(() => {
     (settingsEl.querySelector("#btn-logout") as HTMLElement).hidden = state.status === "logged_out";
@@ -484,6 +484,9 @@ async function main(): Promise<void> {
   settingsEl.inert = true;
   historyEl.inert = true;
   buildSettings();
+  void be.version().then((v) => {
+    (settingsEl.querySelector("#about") as HTMLElement).textContent = `ClaudeUsage ${v} · běží lokálně, bez telemetrie`;
+  });
   historyPanel = buildHistoryPanel(historyEl, be, () => setPanel("main"), () => syncHeight());
   renderMain();
   syncers.forEach((s) => s());
