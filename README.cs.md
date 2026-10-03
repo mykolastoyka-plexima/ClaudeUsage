@@ -168,6 +168,10 @@ Aplikace zobrazuje verzi v patičce Nastavení, čte ji z `tauri.conf.json`.
 
 „Odhlásit se“ v nastavení smaže data profilu WebView2 (cookies, úložiště, cache).
 
+## Licence
+
+[MIT](LICENSE)
+
 ## Struktura projektu
 
 ```

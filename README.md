@@ -13,6 +13,7 @@ Runs locally. No telemetry. No copied cookies or API keys.
 ![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS-5b5bd6)
 ![Tauri 2](https://img.shields.io/badge/Tauri-2-24c8db)
 ![Languages](https://img.shields.io/badge/UI-8%20languages-3fae76)
+[![License: MIT](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
 [Download](#download) · [Features](#features) · [How it works](#how-it-works) · [FAQ](#faq) · [Build from source](#build-from-source) · [Česky](README.cs.md)
 
@@ -205,6 +206,10 @@ ClaudeUsage/
    ├─ nsis/Czech.nsh           Czech installer strings
    └─ capabilities/            permissions: popover UI and claude.ai fetcher
 ```
+
+## License
+
+[MIT](LICENSE) © 2026 Mykola Stoyka
 
 ## Disclaimer
 

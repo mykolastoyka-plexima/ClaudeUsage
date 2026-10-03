@@ -3,6 +3,7 @@ name = "claudeusage"
 version = "0.3.0"
 description = "Claude usage limits in the system tray and menu bar"
 authors = ["Mykola"]
+license = "MIT"
 edition = "2021"
 
 [lib]
