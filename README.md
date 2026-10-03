@@ -1,194 +1,211 @@
+<div align="center">
+
+<img src="docs/images/app-icon.png" width="96" height="96" alt="ClaudeUsage app icon">
+
 # ClaudeUsage
 
-Malá aplikace do systémové lišty, která ukazuje spotřebu Claude předplatného: aktuální 5hodinovou session, týdenní limit a případné další limity, pokud je vrací claude.ai.
+**See your Claude usage limits at a glance: a tiny system tray (Windows) and menu bar (macOS) app.**
 
-- Ikona v liště: procento aktuální session, buď jako velké barevné číslo (výchozí, nejlépe čitelné), nebo jako kroužek s číslem. Barva je zelená do 80 %, oranžová mezi 80 a 95 % a červená nad 95 %, laděná zvlášť pro světlou a tmavou lištu. Tooltip ukazuje session i týden s odpočtem do resetu.
-- Popover po kliknutí: velký ukazatel session, týdenní limit s datem a odpočtem resetu a menší řádky s dalšími limity (jen pokud jsou v datech).
-- Rozložení Normální / Kompaktní, vzhled Auto / Světlý / Tmavý, obnova po 1, 3, 5, 10 nebo 15 minutách.
-- Graf historie spotřeby (dnes, 24 h, 3 dny, týden, měsíc) pro týdenní limit nebo session. claude.ai historii neposkytuje, takže ji aplikace ukládá sama při každé obnově. Graf tedy obsahuje data jen z doby, kdy aplikace běžela.
-- Notifikace při 80 % a 95 %, vždy jen jednou za každé resetovací okno.
-- Spouštění po přihlášení do systému.
-- **Bez telemetrie a bez externích serverů.** Aplikace komunikuje jen s `claude.ai`, stejně jako oficiální stránka.
+Current 5-hour session, weekly limit, reset countdowns, alerts at 80% and 95%, and a usage history chart.<br>
+Runs locally. No telemetry. No copied cookies or API keys.
 
-Platformy: **Windows 10/11** (x64 i ARM64, otestováno) a **macOS 11+** (Apple Silicon i Intel, universal `.dmg`). macOS verze se sestavuje přes GitHub Actions a zatím nebyla ručně vyzkoušená na Macu.
+[![Build](https://github.com/mykolastoyka-plexima/ClaudeUsage/actions/workflows/build.yml/badge.svg)](https://github.com/mykolastoyka-plexima/ClaudeUsage/actions/workflows/build.yml)
+![Platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20macOS-5b5bd6)
+![Tauri 2](https://img.shields.io/badge/Tauri-2-24c8db)
+![Languages](https://img.shields.io/badge/UI-8%20languages-3fae76)
 
-## Jak aplikace získává data
+[Download](#download) · [Features](#features) · [How it works](#how-it-works) · [FAQ](#faq) · [Build from source](#build-from-source) · [Česky](README.cs.md)
 
-Zdroj dat byl ověřen z network requestů oficiální stránky `https://claude.ai/settings/usage` (23. 9. 2026). Stránka volá:
+<img src="docs/images/hero.png" alt="ClaudeUsage popover in light and dark mode showing the current Claude session at 62% and the weekly limit at 41%" width="820">
 
-```
-GET https://claude.ai/api/organizations/{org_uuid}/usage?cedar_ember=1&skip_spend=1
-```
+</div>
 
-Z odpovědi aplikace čte pole `limits` (`kind`, `group`, `percent`, `resets_at`), tedy stejný seznam, jaký vykresluje oficiální stránka. Pole `five_hour` a `seven_day` slouží jen jako záloha, kdyby `limits` zmizelo. `org_uuid` se bere z cookie `lastActiveOrg` a pokud chybí, z `GET /api/organizations`.
+## Why
 
-Postup:
+Claude plans (Pro, Max, Team) limit how much you can use in a rolling **5-hour session** and per **week**. The only place to check is the usage page on claude.ai, which is easy to forget until you hit the wall. ClaudeUsage keeps the numbers in your taskbar or menu bar, colour-codes them and tells you before you run out.
 
-1. Při prvním spuštění se otevře okno s `https://claude.ai/login`. Přihlásíš se normálně a session zůstane v perzistentním profilu WebView2 aplikace. Nic se nekopíruje ručně.
-2. Skryté webview načte malý dokument na doméně `claude.ai` a spustí v něm `fetch` na výše uvedený endpoint. Požadavek tak nese cookies profilu a vypadá stejně jako požadavek oficiální stránky.
-3. Výsledek se vrátí do aplikace přes IPC. Vzdálená stránka smí volat **jediný** příkaz, `usage_report` (viz `src-tauri/capabilities/fetcher.json`).
-4. Odpověď 401 (nebo 403 s JSON) znamená stav „Odhlášeno“ s tlačítkem „Přihlásit znovu“. Síťová chyba zobrazí poslední známá data s označením „Offline“.
+## Features
 
-Endpoint je interní API claude.ai, ne veřejné. Pokud ho Anthropic změní, aplikace ukáže „Neočekávaný formát dat“ a bude potřeba upravit `src-tauri/src/model.rs`.
+- **Live tray / menu bar icon:** the current session percentage as a large coloured number (or a progress ring). Green below 80%, orange from 80% to 95%, red above 95%. The colours are tuned separately for light and dark taskbars.
+- **One-click popover** with the current session, the weekly limit, the exact reset time and a live countdown. Any extra weekly limits (for example per model) or usage credits are shown only when your account has them.
+- **Usage history chart** for today, the last 24 hours, 3 days, a week or a month: average consumption of the weekly limit per hour or day, and the average peak of your sessions.
+- **Alerts at 80% and 95%**, once per reset window, not on every refresh.
+- **Light, dark or automatic theme** that follows the system live, with native Acrylic (Windows 11) or vibrancy (macOS) backgrounds.
+- **Normal and compact layout**, refresh every 1, 3, 5, 10 or 15 minutes, launch at login.
+- **8 languages:** English, Czech, Ukrainian, German, French, Spanish, Italian and Polish, picked from the system or set manually.
+- **Offline-aware:** keeps showing the last known numbers, marked offline, when the network drops. A clear "Signed out" state with a one-click sign-in when the claude.ai session expires.
+- **Small and private:** about a 1.5 MB installer, built with Rust and Tauri 2. All data stays on your computer.
 
-**Tip k přihlášení:** Nejspolehlivější je „Continue with email“. Google někdy odmítá přihlášení ve vložených prohlížečích.
+<div align="center">
+<img src="docs/images/states.png" alt="ClaudeUsage states: near the limit with orange and red colours and extra limits, compact layout, and signed out" width="820">
+<br><sub>Near the limit (with sample extra limits) · compact layout · signed out</sub>
+<br><br>
+<img src="docs/images/history.png" alt="Claude usage history chart: weekly limit consumption per day and session peaks over the last 24 hours" width="820">
+<br><sub>Usage history: weekly limit per day · session peaks over 24 hours</sub>
+<br><br>
+<img src="docs/images/tray-icons.png" alt="ClaudeUsage tray icon colours on dark and light Windows taskbars" width="700">
+<br><sub>Tray icon on dark and light taskbars</sub>
+<br><br>
+<img src="docs/images/settings.png" alt="ClaudeUsage settings: theme, language, layout, tray icon style, refresh interval, alerts and launch at login" width="820">
+<br><sub>Settings</sub>
+</div>
 
-## Požadavky pro vývoj (Windows)
+> Screenshots use sample data.
 
-- [Node.js](https://nodejs.org/) 20+
-- [Rust](https://rustup.rs/) (stable, MSVC toolchain): `winget install Rustlang.Rustup`
-- Visual Studio Build Tools s komponentou „Desktop development with C++“ (MSVC + Windows SDK). Pro ARM64 build také „MSVC … ARM64 build tools“.
-- WebView2 Runtime (součást Windows 11)
+## Download
 
-```bash
-npm install
-```
+Get the installer from the **[latest release](https://github.com/mykolastoyka-plexima/ClaudeUsage/releases/latest)**. Development builds are attached as artifacts to each run of the [Build workflow](https://github.com/mykolastoyka-plexima/ClaudeUsage/actions/workflows/build.yml).
 
-## Vývoj
+| Platform | File |
+|---|---|
+| Windows 10/11, x64 (Intel/AMD) | `ClaudeUsage_<version>_x64-setup.exe` |
+| Windows 11 on ARM | `ClaudeUsage_<version>_arm64-setup.exe` |
+| macOS 11+ (Apple Silicon and Intel) | `ClaudeUsage_<version>_universal.dmg` |
 
-```bash
-npm run tauri dev
-```
+### Windows
 
-Spustí Vite na `http://localhost:1420` a aplikaci. Aplikace nemá hlavní okno, hledej ikonu v liště (případně v přetečení šipkou ^).
+Run the installer. It installs for the current user, no admin rights needed. The installers are not code-signed yet, so SmartScreen may warn on first launch: choose **More info → Run anyway**.
 
-**Náhled designu bez Tauri:** `npm run dev` a otevři `http://localhost:1420` v prohlížeči. Běží s ukázkovými daty (označenými štítkem) a stavy se přepínají parametry:
+A new version installs over the old one and keeps your settings, sign-in and history.
 
-```
-?s=online|offline|logged_out|loading|nodata  &p=62  &w=84  &x=1  &theme=light|dark  &d=normal|compact
-```
+### macOS
 
-Testy datového modelu (parsování reálné ukázky odpovědi):
+Open the `.dmg` and drag **ClaudeUsage** into Applications. The app is ad-hoc signed but not notarized, so macOS asks for confirmation the first time:
 
-```bash
-cd src-tauri && cargo test
-```
+1. Open ClaudeUsage once (macOS will refuse).
+2. Go to **System Settings → Privacy & Security** and click **Open Anyway**.
 
-Náhled všech variant ikony v liště (PNG do `src-tauri/target/tray-preview/`):
-
-```bash
-cd src-tauri && cargo test tray_preview -- --ignored
-```
-
-## Build instalátoru (.exe / .msi)
-
-```bash
-npm run tauri build
-```
-
-Výstupy:
-
-- NSIS instalátor (`.exe`): `src-tauri/target/release/bundle/nsis/ClaudeUsage_0.2.0_<arch>-setup.exe`
-- MSI (`.msi`): `src-tauri/target/release/bundle/msi/ClaudeUsage_0.2.0_<arch>_cs-CZ.msi`
-
-Build pro konkrétní architekturu:
-
-```bash
-rustup target add x86_64-pc-windows-msvc aarch64-pc-windows-msvc
-npm run tauri build -- --target x86_64-pc-windows-msvc
-npm run tauri build -- --target aarch64-pc-windows-msvc
-```
-
-Jen `.exe` instalátor (bez MSI), zvlášť pro každou architekturu:
-
-```bash
-npm run tauri build -- --bundles nsis --target aarch64-pc-windows-msvc
-npm run tauri build -- --bundles nsis --target x86_64-pc-windows-msvc
-```
-
-Výstup je v `src-tauri/target/<target>/release/bundle/nsis/`.
-
-Poznámky:
-
-- NSIS instalátor se instaluje pro aktuálního uživatele (bez admin práv).
-- MSI používá WiX Toolset v3, který Tauri stáhne při prvním buildu. WiX v3 neumí ARM64 MSI, takže pro ARM64 použij NSIS `.exe`.
-- Instalátory nejsou podepsané, takže Windows SmartScreen při prvním spuštění zobrazí varování. Pro distribuci doplň code signing podle [dokumentace Tauri](https://v2.tauri.app/distribute/sign/windows/).
-
-## macOS (.dmg)
-
-`.dmg` se dá sestavit jen na macOS. Jsou dvě cesty:
-
-**GitHub Actions:** workflow [`.github/workflows/build.yml`](.github/workflows/build.yml) sestaví universal `.dmg` (Apple Silicon + Intel) a oba Windows `.exe`.
-
-- Ručně: záložka *Actions* → *Build* → *Run workflow*. Instalátory pak najdeš v sekci *Artifacts* daného běhu.
-- Tagem: `git tag v0.2.0 && git push --tags` vytvoří koncept (draft) GitHub release s přiloženými instalátory.
-
-**Na vlastním Macu** (Xcode Command Line Tools, Node, Rust):
-
-```bash
-rustup target add aarch64-apple-darwin x86_64-apple-darwin
-npm install
-npm run tauri build -- --target universal-apple-darwin --bundles dmg
-```
-
-Výstup: `src-tauri/target/universal-apple-darwin/release/bundle/dmg/ClaudeUsage_0.2.0_universal.dmg`
-
-Chování na macOS:
-
-- Aplikace žije jen v menu baru, bez ikony v Docku.
-- Ikona je monochromatická template ikona (kroužek), takže ladí se světlým i tmavým menu barem. Procento session je jako text vedle ní. Od 80 % se kroužek barví oranžově, nad 95 % červeně.
-- Popover má nativní vibrancy (`NSVisualEffectView`, materiál Popover) a zaoblení 14 px.
-
-**Nenotarizovaná aplikace:** build má jen ad-hoc podpis (`signingIdentity: "-"`), ne Apple Developer ID. macOS proto při prvním spuštění hlásí, že aplikaci nelze ověřit:
-
-1. Přetáhni `ClaudeUsage.app` z `.dmg` do *Aplikací* a zkus ji spustit.
-2. Otevři *Nastavení systému → Soukromí a zabezpečení*, sjeď dolů a klikni na **Přesto otevřít**. Na macOS 15 a novějším už nefunguje pravé tlačítko → *Otevřít*.
-
-Pokud macOS hlásí, že je aplikace **„poškozená“**, jde o příznak karantény po stažení. Odstraníš ho v Terminálu:
+If macOS says the app is damaged, remove the download quarantine flag:
 
 ```bash
 xattr -cr /Applications/ClaudeUsage.app
 ```
 
-Po spuštění aplikace nemá okno ani ikonu v Docku. Hledej kroužek s procentem v menu baru vpravo nahoře. Na MacBooku s výřezem ho může schovat plný menu bar. Při prvním spuštění se otevře okno pro přihlášení ke claude.ai.
+The app lives only in the menu bar (no Dock icon). On a MacBook with a notch, a crowded menu bar can hide it.
 
-## Verze a aktualizace
+macOS support is new and built on CI; Windows is the main tested platform. Please [open an issue](https://github.com/mykolastoyka-plexima/ClaudeUsage/issues) if something does not work on your Mac.
 
-Nová verze se nainstaluje přes starou: instalátor ji rozpozná a nahradí. Nastavení, přihlášení i historie zůstanou zachované. Instalátor sám neaktualizuje, novou verzi je potřeba stáhnout a spustit.
+### First run
 
-Při vydání nové verze zvyš číslo na třech místech (musí se shodovat):
+A window with the claude.ai sign-in page opens. Sign in as usual (**Continue with email** is the most reliable; Google sometimes blocks embedded browsers). The window closes by itself and the numbers appear within seconds.
 
-- `package.json` → `"version"`
-- `src-tauri/Cargo.toml` → `version`
-- `src-tauri/tauri.conf.json` → `"version"`
+## How it works
 
-Aplikace zobrazuje verzi v patičce Nastavení, čte ji z `tauri.conf.json`.
+ClaudeUsage reads the same data as the official usage page, [claude.ai/settings/usage](https://claude.ai/settings/usage). The page loads it from:
 
-## Kde jsou data aplikace
+```
+GET https://claude.ai/api/organizations/{org_uuid}/usage
+```
 
-| Co | Kde |
-|---|---|
-| Nastavení | Windows: `%APPDATA%\com.mykola.claudeusage\settings.json`, macOS: `~/Library/Application Support/com.mykola.claudeusage/settings.json` |
-| Historie spotřeby (35 dní) | Windows: `%APPDATA%\com.mykola.claudeusage\history.jsonl`, macOS: `~/Library/Application Support/com.mykola.claudeusage/history.jsonl` |
-| Záznam odeslaných notifikací | `%APPDATA%\com.mykola.claudeusage\notified.json` |
-| Profil WebView2 (přihlášení) | `%LOCALAPPDATA%\com.mykola.claudeusage\EBWebView` |
+The app reads the `limits` list from that response (`kind`, `percent`, `resets_at`), which is exactly what the official page renders.
 
-„Odhlásit se“ v nastavení smaže data profilu WebView2 (cookies, úložiště, cache).
+1. You sign in once in an app window. The session stays in the app's own persistent WebView profile. Nothing is copied by hand.
+2. On each refresh, a hidden webview on the `claude.ai` origin calls the endpoint with `fetch`, so the request carries the profile's cookies like the official page does.
+3. The result comes back over Tauri IPC. The remote page may call exactly one command, `usage_report` ([`capabilities/fetcher.json`](src-tauri/capabilities/fetcher.json)).
+4. A `401` (or a JSON `403`) switches to "Signed out". A network error keeps the last numbers and marks them offline.
 
-## Struktura projektu
+The usage history is not available from claude.ai. ClaudeUsage records its own samples (only when values change, plus a heartbeat every 15 minutes) and keeps 35 days locally. The chart therefore covers the time the app was running.
+
+> The endpoint is an internal claude.ai API, not a public one. If it changes, the app shows "Unexpected data format" until [`model.rs`](src-tauri/src/model.rs) is updated.
+
+## Privacy
+
+- No telemetry, analytics or third-party servers. The app talks only to `claude.ai`.
+- No cookies, tokens or passwords are read or stored by the app. The sign-in lives in the WebView profile, as in a browser.
+- **Sign out** in Settings wipes the WebView profile (cookies, storage, cache).
+
+| Data | Windows | macOS |
+|---|---|---|
+| Settings | `%APPDATA%\com.mykola.claudeusage\settings.json` | `~/Library/Application Support/com.mykola.claudeusage/settings.json` |
+| Usage history (35 days) | `%APPDATA%\com.mykola.claudeusage\history.jsonl` | `~/Library/Application Support/com.mykola.claudeusage/history.jsonl` |
+| Sign-in (WebView profile) | `%LOCALAPPDATA%\com.mykola.claudeusage\EBWebView` | WebKit data store of the app |
+
+## FAQ
+
+**How do I check my Claude usage limits?**
+On the web: claude.ai → Settings → Usage. With ClaudeUsage the same numbers sit in your tray or menu bar and refresh automatically.
+
+**Which plans does it work with?**
+Any account that shows limits on claude.ai/settings/usage. It was developed and tested with a Team plan. The app shows whatever limits your account reports.
+
+**Does it use the Anthropic API or an API key?**
+No. It reads the usage of your claude.ai subscription through your normal sign-in. API (Console) usage and billing are not covered.
+
+**Why is the history chart empty?**
+claude.ai has no usage history, so ClaudeUsage builds it from its own refreshes. The chart fills in while the app runs.
+
+**Can I change the language?**
+Yes. Settings → Language. "Automatic" follows the system language and falls back to English.
+
+**Is it safe to sign in inside the app?**
+The sign-in window is the real claude.ai page in a WebView. The app never sees your password, and the hidden fetcher can only send the usage response back (see [How it works](#how-it-works)).
+
+## Build from source
+
+Requirements: [Node.js](https://nodejs.org/) 20+, [Rust](https://rustup.rs/) stable, and the Tauri [prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS (Windows: Visual Studio Build Tools with C++ and WebView2; macOS: Xcode Command Line Tools).
+
+```bash
+npm install
+npm run tauri dev
+```
+
+The app has no main window; look for the icon in the tray or menu bar.
+
+**Design preview without Tauri:** `npm run dev` and open http://localhost:1420. It runs on sample data. Parameters switch states:
+
+```
+?s=online|offline|logged_out|loading|nodata  &p=62  &w=84  &x=1  &theme=light|dark  &d=compact  &lang=de  &panel=history|settings
+```
+
+**Installers:**
+
+```bash
+# Windows: one NSIS installer per architecture
+npm run tauri build -- --bundles nsis --target x86_64-pc-windows-msvc
+npm run tauri build -- --bundles nsis --target aarch64-pc-windows-msvc
+
+# macOS: universal .dmg (Apple Silicon + Intel)
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+npm run tauri build -- --target universal-apple-darwin --bundles dmg
+```
+
+Output: `src-tauri/target/<target>/release/bundle/`.
+
+The [Build workflow](.github/workflows/build.yml) builds all three installers on GitHub Actions. Run it manually, or push a `v*` tag to also create a draft release with the installers attached.
+
+**Tests:**
+
+```bash
+cd src-tauri && cargo test                          # usage response parsing
+cd src-tauri && cargo test tray_preview -- --ignored # renders every tray icon variant to target/tray-preview/
+```
+
+**Releasing a version:** bump `version` in `package.json`, `src-tauri/Cargo.toml` and `src-tauri/tauri.conf.json` (they must match). Settings shows the version read from the app.
+
+### Project structure
 
 ```
 ClaudeUsage/
-├─ index.html, src/            frontend (vanilla TypeScript + Vite)
-│  ├─ main.ts                  popover: render, animace, nastavení, přepínání panelů
-│  ├─ lib/                     ipc (+ mock pro náhled), formátování času, DOM helpery
-│  └─ styles/                  tokens.css (design tokeny světlý/tmavý), app.css
-├─ assets/app-icon.svg         zdroj ikony aplikace (npx tauri icon assets/app-icon.svg -o src-tauri/icons)
+├─ index.html, src/            popover UI (vanilla TypeScript + Vite, no framework)
+│  ├─ main.ts                  rendering, animations, settings, panel switching
+│  ├─ history-panel.ts         usage history chart (SVG)
+│  ├─ lib/i18n.ts              UI strings in 8 languages
+│  ├─ lib/usage-history.ts     consumption and averages from recorded samples
+│  └─ styles/                  design tokens (light/dark) and styles
+├─ assets/app-icon.svg         app icon source
 └─ src-tauri/
-   ├─ src/lib.rs               stav, příkazy, tray, plánovač obnovy
-   ├─ src/fetcher.rs           skryté webview claude.ai + přihlašovací okno
-   ├─ src/model.rs             datový model odpovědi /usage (+ testy)
-   ├─ src/tray_icon.rs         vykreslení ikony v liště (kroužek + %)
-   ├─ src/popover.rs           pozice u ikony, acrylic pozadí, zaoblení
-   ├─ src/notify.rs            notifikace 80/95 % jednou za okno
-   ├─ src/settings.rs          perzistence nastavení
-   └─ capabilities/            oprávnění: popover (lokální UI) a fetcher (jen usage_report)
+   ├─ src/lib.rs               state, commands, tray, refresh scheduler
+   ├─ src/fetcher.rs           hidden claude.ai webview and sign-in window
+   ├─ src/model.rs             usage response model (+ tests)
+   ├─ src/history.rs           local usage history (JSON lines, 35 days)
+   ├─ src/lang.rs              tray, menu and notification strings
+   ├─ src/tray_icon.rs         tray icon rendering (number, ring, macOS template)
+   ├─ src/popover.rs           positioning, Acrylic/vibrancy, rounded corners
+   ├─ src/notify.rs            80% / 95% alerts, once per window
+   ├─ nsis/Czech.nsh           Czech installer strings
+   └─ capabilities/            permissions: popover UI and claude.ai fetcher
 ```
 
-## Design
+## Disclaimer
 
-- Design tokeny v `src/styles/tokens.css` pro světlý a tmavý režim. Stavové barvy jsou laděné zvlášť pro každý režim a všechny texty mají kontrast aspoň WCAG AA (4,5 : 1).
-- Režim Auto sleduje systém živě, bez restartu. Ruční volba ho přebíjí a ukládá se lokálně. Přepnutí má 220ms přechod.
-- Na Windows 11 má okno nativní Acrylic pozadí a zaoblení 8 px od DWM. Windows u průsvitného pozadí jiný poloměr nenabízí. Pokud Acrylic není dostupný, použije se neprůhledný povrch.
-- Ikony jsou z [Lucide](https://lucide.dev) (ISC licence).
-- Ikona aplikace „CU“ se stylizovanou jiskrou je vlastní kresba. Není to oficiální logo Claude, barva jiskry na něj jen odkazuje. Při veřejné distribuci je potřeba dodržet ochranné známky Anthropicu.
+ClaudeUsage is an independent, unofficial project. It is not affiliated with, endorsed by or supported by Anthropic. "Claude" is a trademark of Anthropic, PBC. The app relies on an internal claude.ai endpoint that may change at any time.

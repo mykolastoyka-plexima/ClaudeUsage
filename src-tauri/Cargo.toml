@@ -1,7 +1,7 @@
 [package]
 name = "claudeusage"
-version = "0.2.0"
-description = "ClaudeUsage – spotřeba Claude předplatného v systémové liště"
+version = "0.3.0"
+description = "Claude usage limits in the system tray and menu bar"
 authors = ["Mykola"]
 edition = "2021"
 
@@ -24,6 +24,7 @@ chrono = { version = "0.4", default-features = false, features = ["std", "clock"
 tiny-skia = "0.12"
 ab_glyph = "0.2"
 window-vibrancy = "0.8"
+sys-locale = "0.3"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

@@ -24,7 +24,9 @@ use serde_json::Value;
 pub struct Limit {
     pub kind: String,
     pub group: String,
-    pub label: String,
+    /// Display name for limits beyond session / weekly_all (e.g. "Opus");
+    /// the UI and the tray build the localised label from `kind` + `name`.
+    pub name: Option<String>,
     pub percent: f64,
     pub resets_at: Option<String>,
     pub severity: Option<String>,
@@ -32,7 +34,7 @@ pub struct Limit {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Extra {
-    pub label: String,
+    pub kind: String,
     pub percent: Option<f64>,
     pub used: Option<f64>,
     pub limit: Option<f64>,
@@ -76,7 +78,7 @@ pub fn parse(v: &Value) -> Option<Snapshot> {
                     limits.push(Limit {
                         kind: kind.into(),
                         group: group.into(),
-                        label: label_for(kind, None),
+                        name: name_for(kind, None),
                         percent: p,
                         resets_at: w.get("resets_at").and_then(Value::as_str).map(Into::into),
                         severity: None,
@@ -97,7 +99,7 @@ pub fn parse(v: &Value) -> Option<Snapshot> {
         let used = e.get("used_dollars").and_then(Value::as_f64);
         let limit = e.get("limit_dollars").and_then(Value::as_f64);
         if enabled && (percent.is_some() || (used.is_some() && limit.is_some())) {
-            extras.push(Extra { label: "Usage credits".into(), percent, used, limit });
+            extras.push(Extra { kind: "credits".into(), percent, used, limit });
         }
     }
 
@@ -118,7 +120,7 @@ fn parse_limit(l: &Value) -> Option<Limit> {
         _ => None,
     };
     Some(Limit {
-        label: label_for(&kind, scope.as_deref()),
+        name: name_for(&kind, scope.as_deref()),
         kind,
         group,
         percent,
@@ -127,21 +129,13 @@ fn parse_limit(l: &Value) -> Option<Limit> {
     })
 }
 
-fn label_for(kind: &str, scope: Option<&str>) -> String {
+fn name_for(kind: &str, scope: Option<&str>) -> Option<String> {
     match kind {
-        "session" => "Aktuální session".into(),
-        "weekly_all" => "Týdenní limit".into(),
-        _ => {
-            let name = scope.map(str::to_string).unwrap_or_else(|| {
-                let rest = kind.strip_prefix("weekly_").unwrap_or(kind);
-                rest.split('_').map(capitalize).collect::<Vec<_>>().join(" ")
-            });
-            if kind.starts_with("weekly") {
-                format!("Týdenní · {name}")
-            } else {
-                name
-            }
-        }
+        "session" | "weekly_all" => None,
+        _ => Some(scope.map(str::to_string).unwrap_or_else(|| {
+            let rest = kind.strip_prefix("weekly_").unwrap_or(kind);
+            rest.split('_').map(capitalize).collect::<Vec<_>>().join(" ")
+        })),
     }
 }
 
@@ -179,12 +173,13 @@ mod tests {
         v.as_object_mut().unwrap().remove("limits");
         let s = parse(&v).unwrap();
         assert_eq!(s.session().unwrap().percent, 10.0);
-        assert_eq!(s.weekly().unwrap().label, "Týdenní limit");
+        assert_eq!(s.weekly().unwrap().kind, "weekly_all");
     }
 
     #[test]
-    fn labels_model_limits() {
-        assert_eq!(label_for("weekly_opus", None), "Týdenní · Opus");
-        assert_eq!(label_for("weekly_x", Some("Sonnet 5")), "Týdenní · Sonnet 5");
+    fn names_model_limits() {
+        assert_eq!(name_for("weekly_opus", None).as_deref(), Some("Opus"));
+        assert_eq!(name_for("weekly_x", Some("Sonnet 5")).as_deref(), Some("Sonnet 5"));
+        assert_eq!(name_for("weekly_all", None), None);
     }
 }

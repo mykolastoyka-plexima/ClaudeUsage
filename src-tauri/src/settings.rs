@@ -32,6 +32,8 @@ pub struct Settings {
     pub theme: ThemePref,
     pub density: Density,
     pub tray_style: TrayStyle,
+    /// "auto" (follow the OS) or one of `lang::LANGS`.
+    pub language: String,
     pub interval_min: u64,
     pub notifications: bool,
     /// Mirrors the real autostart registration; refreshed from the OS at startup.
@@ -40,7 +42,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { theme: ThemePref::Auto, density: Density::Normal, tray_style: TrayStyle::Number, interval_min: 5, notifications: true, autostart: false }
+        Self { theme: ThemePref::Auto, density: Density::Normal, tray_style: TrayStyle::Number, language: "auto".into(), interval_min: 5, notifications: true, autostart: false }
     }
 }
 
@@ -50,6 +52,9 @@ impl Settings {
     pub fn sanitize(mut self) -> Self {
         if !INTERVALS.contains(&self.interval_min) {
             self.interval_min = 5;
+        }
+        if self.language != "auto" && !crate::lang::LANGS.contains(&self.language.as_str()) {
+            self.language = "auto".into();
         }
         self
     }

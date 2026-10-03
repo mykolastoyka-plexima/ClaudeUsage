@@ -1,5 +1,6 @@
 mod fetcher;
 mod history;
+mod lang;
 mod model;
 mod notify;
 mod popover;
@@ -10,7 +11,7 @@ use serde::Serialize;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tauri::image::Image;
-use tauri::menu::{MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
+use tauri::menu::{Menu, MenuBuilder, MenuItemBuilder, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Theme, WindowEvent};
 use tauri_plugin_autostart::ManagerExt;
@@ -47,6 +48,9 @@ struct Core {
     notify_log: NotifyLog,
     /// The first result after launch decides whether to open the sign-in window.
     first_result: bool,
+    /// Resolved UI language and BCP 47 locale (see `lang::resolve`).
+    lang: String,
+    locale: String,
 }
 
 struct Scheduler(Arc<Notify>);
@@ -60,6 +64,8 @@ struct StateDto {
     settings: Settings,
     vibrancy: bool,
     refreshing: bool,
+    lang: String,
+    locale: String,
 }
 
 /// Never hold this guard across a Tauri API call (tray, window, webview, emit):
@@ -79,6 +85,8 @@ fn dto(c: &Core) -> StateDto {
         settings: c.settings.clone(),
         vibrancy: c.vibrancy,
         refreshing: c.pending.is_some(),
+        lang: c.lang.clone(),
+        locale: c.locale.clone(),
     }
 }
 
@@ -86,6 +94,10 @@ fn publish(app: &AppHandle) {
     let state = dto(&core(app));
     let _ = app.emit_to(popover::LABEL, "state", state);
     update_tray(app);
+}
+
+pub(crate) fn strings_for(app: &AppHandle) -> &'static lang::Strings {
+    lang::strings(&core(app).lang)
 }
 
 pub(crate) fn pending_request(app: &AppHandle) -> Option<u64> {
@@ -139,7 +151,7 @@ fn finish(app: &AppHandle, report: fetcher::Report) {
             fetcher::Report::Ok { body, .. } => {
                 match serde_json::from_str(&body).ok().and_then(|v| model::parse(&v)) {
                     Some(snap) => {
-                        let (changed, pending) = notify::check(&snap, &mut c.notify_log, c.settings.notifications);
+                        let (changed, pending) = notify::check(&snap, &mut c.notify_log, c.settings.notifications, lang::strings(&c.lang));
                         if changed {
                             notify_log_to_save = Some(c.notify_log.clone());
                         }
@@ -153,7 +165,7 @@ fn finish(app: &AppHandle, report: fetcher::Report) {
                     }
                     None => {
                         c.status = Status::Offline;
-                        c.error = Some("Neočekávaný formát dat".into());
+                        c.error = Some("format".into());
                     }
                 }
             }
@@ -165,11 +177,11 @@ fn finish(app: &AppHandle, report: fetcher::Report) {
             }
             fetcher::Report::Http { status, .. } => {
                 c.status = Status::Offline;
-                c.error = Some(format!("Server vrátil {status}"));
+                c.error = Some(format!("http:{status}"));
             }
             fetcher::Report::Network { error, .. } => {
                 c.status = Status::Offline;
-                c.error = Some(if error == "timeout" { "Vypršel časový limit".into() } else { "Bez připojení".into() });
+                c.error = Some(if error == "timeout" { "timeout".into() } else { "offline".into() });
             }
         }
     }
@@ -194,13 +206,14 @@ fn finish(app: &AppHandle, report: fetcher::Report) {
 fn update_tray(app: &AppHandle) {
     let Some(tray) = app.tray_by_id(TRAY_ID) else { return };
     // Copy what we need and release the lock before touching the tray (see `core`).
-    let (status, session, weekly, tray_style) = {
+    let (status, session, weekly, tray_style, t) = {
         let c = core(app);
         (
             c.status,
             c.snapshot.as_ref().and_then(|s| s.session().cloned()),
             c.snapshot.as_ref().and_then(|s| s.weekly().cloned()),
             c.settings.tray_style,
+            lang::strings(&c.lang),
         )
     };
     #[cfg(target_os = "macos")]
@@ -233,23 +246,23 @@ fn update_tray(app: &AppHandle) {
 
     let mut tip = String::from("ClaudeUsage");
     match status {
-        Status::LoggedOut => tip.push_str("\nOdhlášeno"),
-        Status::Loading if session.is_none() => tip.push_str("\nNačítám…"),
+        Status::LoggedOut => tip.push_str(&format!("\n{}", t.signed_out)),
+        Status::Loading if session.is_none() => tip.push_str(&format!("\n{}", t.loading)),
         _ => {
             if let Some(s) = &session {
-                tip.push_str(&format!("\nSession {:.0} %", s.percent));
-                if let Some(cd) = notify::countdown(s.resets_at.as_deref()) {
-                    tip.push_str(&format!(" · reset za {cd}"));
+                tip.push_str(&format!("\n{} {:.0} %", t.session, s.percent));
+                if let Some(cd) = notify::countdown(s.resets_at.as_deref(), t) {
+                    tip.push_str(&format!(" · {}", lang::Strings::fill(t.reset_in, &cd)));
                 }
             }
             if let Some(w) = &weekly {
-                tip.push_str(&format!("\nTýden {:.0} %", w.percent));
-                if let Some(when) = notify::weekday_time(w.resets_at.as_deref()) {
-                    tip.push_str(&format!(" · reset {when}"));
+                tip.push_str(&format!("\n{} {:.0} %", t.week, w.percent));
+                if let Some(when) = notify::weekday_time(w.resets_at.as_deref(), t) {
+                    tip.push_str(&format!(" · {}", lang::Strings::fill(t.reset_at, &when)));
                 }
             }
             if status == Status::Offline {
-                tip.push_str("\nOffline");
+                tip.push_str(&format!("\n{}", t.offline));
             }
         }
     }
@@ -309,7 +322,19 @@ fn set_settings(app: AppHandle, settings: Settings) -> StateDto {
         apply_theme(&app, settings.theme);
     }
     settings::save_settings(&app, &settings);
-    core(&app).settings = settings.clone();
+    let lang_changed = settings.language != old.language;
+    {
+        let mut c = core(&app);
+        c.settings = settings.clone();
+        if lang_changed {
+            (c.lang, c.locale) = lang::resolve(&settings.language);
+        }
+    }
+    if lang_changed {
+        if let (Some(tray), Ok(menu)) = (app.tray_by_id(TRAY_ID), tray_menu(&app)) {
+            let _ = tray.set_menu(Some(menu));
+        }
+    }
     if settings.interval_min != old.interval_min {
         app.state::<Scheduler>().0.notify_one();
     }
@@ -360,16 +385,21 @@ fn quit_app(app: AppHandle) {
 
 // ---------------------------------------------------------------- setup
 
-fn build_tray(app: &AppHandle) -> tauri::Result<()> {
-    let open = MenuItemBuilder::with_id("open", "Otevřít ClaudeUsage").build(app)?;
-    let refresh_item = MenuItemBuilder::with_id("refresh", "Obnovit").build(app)?;
-    let quit = MenuItemBuilder::with_id("quit", "Ukončit").build(app)?;
-    let menu = MenuBuilder::new(app)
+fn tray_menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
+    let t = strings_for(app);
+    let open = MenuItemBuilder::with_id("open", t.menu_open).build(app)?;
+    let refresh_item = MenuItemBuilder::with_id("refresh", t.menu_refresh).build(app)?;
+    let quit = MenuItemBuilder::with_id("quit", t.menu_quit).build(app)?;
+    MenuBuilder::new(app)
         .item(&open)
         .item(&refresh_item)
         .item(&PredefinedMenuItem::separator(app)?)
         .item(&quit)
-        .build()?;
+        .build()
+}
+
+fn build_tray(app: &AppHandle) -> tauri::Result<()> {
+    let menu = tray_menu(app)?;
 
     #[cfg(target_os = "macos")]
     let (rgba, size) = (tray_icon::render_macos(MAC_ICON, None, Tone::Muted).0, MAC_ICON);
@@ -439,6 +469,7 @@ pub fn run() {
             let handle = app.handle().clone();
             let mut settings = settings::load_settings(&handle);
             settings.autostart = handle.autolaunch().is_enabled().unwrap_or(false);
+            let lang = lang::resolve(&settings.language);
 
             let vibrancy = match popover::window(&handle) {
                 Some(w) => popover::apply_backdrop(&w),
@@ -456,6 +487,8 @@ pub fn run() {
                 pending: None,
                 notify_log: settings::load_notify_log(&handle),
                 first_result: true,
+                lang: lang.0,
+                locale: lang.1,
             }));
             apply_theme(&handle, settings.theme);
 

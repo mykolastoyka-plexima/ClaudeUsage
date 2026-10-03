@@ -1,7 +1,11 @@
 {
   "name": "claudeusage",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
+  "description": "Claude usage limits in the system tray (Windows) and menu bar (macOS): session and weekly limits, reset countdowns, alerts and history.",
+  "keywords": ["claude", "claude-ai", "anthropic", "usage", "rate-limit", "tray", "menu-bar", "tauri", "windows", "macos"],
+  "repository": { "type": "git", "url": "https://github.com/mykolastoyka-plexima/ClaudeUsage.git" },
+  "homepage": "https://github.com/mykolastoyka-plexima/ClaudeUsage#readme",
   "type": "module",
   "scripts": {
     "dev": "vite",

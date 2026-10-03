@@ -28,7 +28,8 @@ const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 export function tweenNumber(el: HTMLElement, from: number, to: number, ms = 900): void {
   const prev = (el as HTMLElement & { _raf?: number })._raf;
   if (prev) cancelAnimationFrame(prev);
-  if (from === to || matchMedia("(prefers-reduced-motion: reduce)").matches) {
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches || document.documentElement.classList.contains("shot");
+  if (from === to || still) {
     el.textContent = String(Math.round(to));
     return;
   }

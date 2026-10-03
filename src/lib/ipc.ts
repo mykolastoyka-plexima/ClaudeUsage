@@ -41,7 +41,7 @@ async function tauriBackend(): Promise<Backend> {
 /**
  * Browser preview (`npm run dev` opened outside Tauri) with fake data, so the UI
  * can be designed and screenshotted in every state:
- *   ?s=online|offline|logged_out|loading|nodata  &p=62  &w=84  &x=1  &theme=dark  &d=compact
+ *   ?s=online|offline|logged_out|loading|nodata  &p=62  &w=84  &x=1  &theme=dark  &d=compact  &lang=en
  */
 function mockBackend(): Backend {
   const q = new URLSearchParams(location.search);
@@ -52,28 +52,27 @@ function mockBackend(): Backend {
   let listeners: Listener[] = [];
   const snapshot: Snapshot = {
     limits: [
-      { kind: "session", group: "session", label: "Aktuální session", percent: p, resets_at: inH(2.23), severity: "normal" },
-      { kind: "weekly_all", group: "weekly", label: "Týdenní limit", percent: w, resets_at: inH(62.4), severity: "normal" },
-      ...(q.get("x")
-        ? [{ kind: "weekly_opus", group: "weekly", label: "Týdenní · Opus", percent: 41, resets_at: inH(62.4), severity: "normal" }]
-        : []),
+      { kind: "session", group: "session", name: null, percent: p, resets_at: inH(2.23), severity: "normal" },
+      { kind: "weekly_all", group: "weekly", name: null, percent: w, resets_at: inH(62.4), severity: "normal" },
+      ...(q.get("x") ? [{ kind: "weekly_opus", group: "weekly", name: "Opus", percent: 41, resets_at: inH(62.4), severity: "normal" }] : []),
     ],
-    extras: q.get("x") ? [{ label: "Usage credits", percent: null, used: 12.4, limit: 50 }] : [],
+    extras: q.get("x") ? [{ kind: "credits", percent: null, used: 12.4, limit: 50 }] : [],
   };
   let state: AppState = {
     status: status === "nodata" ? "offline" : status,
     snapshot: status === "online" || status === "offline" ? snapshot : null,
     updated_at: status === "offline" ? Date.now() - 14 * 60_000 : status === "online" ? Date.now() - 2 * 60_000 : null,
-    error: status === "nodata" || status === "offline" ? "Bez připojení" : null,
-    settings: { theme: (q.get("theme") as Settings["theme"]) ?? "auto", density: (q.get("d") as Settings["density"]) ?? "normal", tray_style: "number", interval_min: 5, notifications: true, autostart: false },
+    error: status === "nodata" || status === "offline" ? "offline" : null,
+    settings: { theme: (q.get("theme") as Settings["theme"]) ?? "auto", density: (q.get("d") as Settings["density"]) ?? "normal", tray_style: "number", language: q.get("lang") ?? "auto", interval_min: 5, notifications: true, autostart: false },
     vibrancy: false,
     refreshing: status === "loading",
+    ...mockLang(q.get("lang")),
   };
   const emit = () => listeners.forEach((l) => l(state));
   const history = q.get("h") === "0" ? [] : mockHistory(Number(q.get("days") ?? 35));
   return {
     getState: async () => state,
-    version: async () => "náhled",
+    version: async () => "preview",
     getHistory: async (hours) => history.filter((s) => s.t >= Date.now() - hours * 3_600_000),
     onState: (fn) => void listeners.push(fn),
     onShown: () => {},
@@ -86,13 +85,23 @@ function mockBackend(): Backend {
         emit();
       }, 900);
     },
-    setSettings: async (s) => ((state = { ...state, settings: s }), emit(), state),
+    setSettings: async (s) => ((state = { ...state, settings: s, ...mockLang(s.language) }), emit(), state),
     openLogin: async () => {},
     logout: async () => ((state = { ...state, status: "logged_out", snapshot: null, updated_at: null }), emit()),
     resize: (h) => ((document.getElementById("app") as HTMLElement).style.height = `${h}px`),
     hide: () => {},
     quit: () => {},
   };
+}
+
+const MOCK_LOCALES: Record<string, string> = { cs: "cs-CZ", en: "en-US", uk: "uk-UA", de: "de-DE", fr: "fr-FR", es: "es-ES", it: "it-IT", pl: "pl-PL" };
+
+/** Mirrors lang::resolve in the backend: "auto" follows the browser. */
+function mockLang(pref: string | null): { lang: string; locale: string } {
+  const sys = navigator.language || "en-US";
+  const sysLang = sys.split("-")[0].toLowerCase();
+  const lang = pref && pref in MOCK_LOCALES ? pref : sysLang in MOCK_LOCALES ? sysLang : "en";
+  return { lang, locale: sysLang === lang ? sys : MOCK_LOCALES[lang] };
 }
 
 export async function backend(): Promise<Backend> {

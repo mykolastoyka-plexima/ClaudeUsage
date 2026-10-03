@@ -102,7 +102,7 @@ pub fn open_login(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     }
     let url: Url = "https://claude.ai/login".parse().expect("static url");
     let w = WebviewWindowBuilder::new(app, LOGIN, WebviewUrl::External(url))
-        .title("ClaudeUsage – přihlášení")
+        .title(crate::strings_for(app).login_title)
         .inner_size(480.0, 760.0)
         .min_inner_size(400.0, 560.0)
         .center()

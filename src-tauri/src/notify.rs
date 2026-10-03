@@ -1,3 +1,4 @@
+use crate::lang::Strings;
 use crate::model::{Limit, Snapshot};
 use crate::settings::NotifyLog;
 use chrono::{DateTime, Utc};
@@ -28,7 +29,7 @@ fn window_key(l: &Limit) -> Option<(String, i64)> {
 
 /// Decides at most one notification per limit window and threshold. Returns
 /// whether the log changed (and should be persisted) plus what to show.
-pub fn check(snap: &Snapshot, log: &mut NotifyLog, enabled: bool) -> (bool, Vec<Pending>) {
+pub fn check(snap: &Snapshot, log: &mut NotifyLog, enabled: bool, t: &Strings) -> (bool, Vec<Pending>) {
     let mut out = Vec::new();
     let now = Utc::now().timestamp();
     let before = log.fired.len();
@@ -52,41 +53,42 @@ pub fn check(snap: &Snapshot, log: &mut NotifyLog, enabled: bool) -> (bool, Vec<
         }
         changed = true;
         if enabled && top_new {
-            let body = match countdown(l.resets_at.as_deref()) {
-                Some(c) => format!("{}: {:.0} % · reset za {c}", l.label, l.percent),
-                None => format!("{}: {:.0} %", l.label, l.percent),
+            let label = t.limit_label(l);
+            let body = match countdown(l.resets_at.as_deref(), t) {
+                Some(c) => format!("{label}: {:.0} % · {}", l.percent, Strings::fill(t.reset_in, &c)),
+                None => format!("{label}: {:.0} %", l.percent),
             };
-            let title = if top >= 95 { "Limit je téměř vyčerpán" } else { "Blížíš se limitu" };
+            let title = if top >= 95 { t.notify_critical } else { t.notify_warn };
             out.push(Pending { title, body });
         }
     }
     (changed, out)
 }
 
-/// "so 7:00 (za 2 d 14 h)" in local time, rounded to the nearest minute.
-pub fn weekday_time(resets_at: Option<&str>) -> Option<String> {
+/// "Sat 7:00 (2 d 14 h)" in local time, rounded to the nearest minute.
+pub fn weekday_time(resets_at: Option<&str>, t: &Strings) -> Option<String> {
     use chrono::{Datelike, Local, TimeZone, Timelike};
-    const DAYS: [&str; 7] = ["po", "út", "st", "čt", "pá", "so", "ne"];
-    let t = DateTime::parse_from_rfc3339(resets_at?).ok()?;
-    let secs = (t.timestamp_millis() + 30_000).div_euclid(60_000) * 60;
+    let at = DateTime::parse_from_rfc3339(resets_at?).ok()?;
+    let secs = (at.timestamp_millis() + 30_000).div_euclid(60_000) * 60;
     let local = Local.timestamp_opt(secs, 0).single()?;
-    let day = DAYS[local.weekday().num_days_from_monday() as usize];
+    let day = t.days[local.weekday().num_days_from_monday() as usize];
     let when = format!("{day} {}:{:02}", local.hour(), local.minute());
-    Some(match countdown(resets_at) {
-        Some(cd) => format!("{when} (za {cd})"),
+    Some(match countdown(resets_at, t) {
+        Some(cd) => format!("{when} ({cd})"),
         None => when,
     })
 }
 
-pub fn countdown(resets_at: Option<&str>) -> Option<String> {
+pub fn countdown(resets_at: Option<&str>, tr: &Strings) -> Option<String> {
+    let [ud, uh, um] = tr.units;
     let t = DateTime::parse_from_rfc3339(resets_at?).ok()?;
     let mins = ((t.timestamp() - Utc::now().timestamp()).max(0) + 59) / 60;
     let (d, h, m) = (mins / 1440, (mins % 1440) / 60, mins % 60);
     Some(if d > 0 {
-        format!("{d} d {h} h")
+        format!("{d} {ud} {h} {uh}")
     } else if h > 0 {
-        format!("{h} h {m} min")
+        format!("{h} {uh} {m} {um}")
     } else {
-        format!("{m} min")
+        format!("{m} {um}")
     })
 }

@@ -6,14 +6,15 @@ export type TrayStyle = "number" | "ring";
 export interface Limit {
   kind: string;
   group: string;
-  label: string;
+  /** Model name for limits other than session / weekly_all. */
+  name: string | null;
   percent: number;
   resets_at: string | null;
   severity: string | null;
 }
 
 export interface Extra {
-  label: string;
+  kind: string;
   percent: number | null;
   used: number | null;
   limit: number | null;
@@ -28,6 +29,8 @@ export interface Settings {
   theme: ThemePref;
   density: Density;
   tray_style: TrayStyle;
+  /** "auto" or a language code from i18n LANGS. */
+  language: string;
   interval_min: number;
   notifications: boolean;
   autostart: boolean;
@@ -41,6 +44,9 @@ export interface AppState {
   settings: Settings;
   vibrancy: boolean;
   refreshing: boolean;
+  /** Resolved UI language and BCP 47 locale. */
+  lang: string;
+  locale: string;
 }
 
 export interface HistorySample {

@@ -4,22 +4,35 @@ import type { Backend } from "./lib/ipc";
 import { segmented } from "./lib/segmented";
 import { buildSeries, niceMax, RANGE_HOURS, type Bucket, type Metric, type Range, type Series } from "./lib/usage-history";
 import type { HistorySample } from "./lib/types";
+import { avgPct, pct } from "./lib/format";
+import { locale, t, type Key } from "./lib/i18n";
 
 const SVG = "http://www.w3.org/2000/svg";
 const W = 284;
 const HGT = 148;
 const PAD = { l: 24, r: 2, t: 16, b: 18 };
-const RANGES: { value: Range; label: string }[] = [
-  { value: "today", label: "Dnes" },
-  { value: "24h", label: "24 h" },
-  { value: "3d", label: "3 dny" },
-  { value: "week", label: "Týden" },
-  { value: "month", label: "Měsíc" },
+const RANGES: { value: Range; key: Key }[] = [
+  { value: "today", key: "rangeToday" },
+  { value: "24h", key: "range24h" },
+  { value: "3d", key: "range3d" },
+  { value: "week", key: "rangeWeek" },
+  { value: "month", key: "rangeMonth" },
 ];
 
-const weekday = new Intl.DateTimeFormat("cs-CZ", { weekday: "short" });
-const hm = new Intl.DateTimeFormat("cs-CZ", { hour: "numeric", minute: "2-digit" });
-const dm = (d: Date) => `${d.getDate()}. ${d.getMonth() + 1}.`;
+// Created on first use, after the UI language is known.
+let fmt: { weekday: Intl.DateTimeFormat; hm: Intl.DateTimeFormat; hour: Intl.DateTimeFormat; dm: Intl.DateTimeFormat; wdm: Intl.DateTimeFormat; full: Intl.DateTimeFormat } | null = null;
+function f() {
+  const loc = locale();
+  fmt ??= {
+    weekday: new Intl.DateTimeFormat(loc, { weekday: "short" }),
+    hm: new Intl.DateTimeFormat(loc, { hour: "numeric", minute: "2-digit" }),
+    hour: new Intl.DateTimeFormat(loc, { hour: "numeric" }),
+    dm: new Intl.DateTimeFormat(loc, { day: "numeric", month: "numeric" }),
+    wdm: new Intl.DateTimeFormat(loc, { weekday: "short", day: "numeric", month: "numeric" }),
+    full: new Intl.DateTimeFormat(loc, { weekday: "short", day: "numeric", month: "numeric", hour: "numeric", minute: "2-digit" }),
+  };
+  return fmt;
+}
 
 function load<T extends string>(key: string, fallback: T, allowed: readonly string[]): T {
   try {
@@ -38,42 +51,29 @@ function save(key: string, v: string): void {
   }
 }
 
-function pct(v: number): string {
-  if (v > 0 && v < 1) return "<1 %";
-  return `${Math.round(v)} %`;
-}
-
-const dec = new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 1 });
-/** One decimal below 10 so small hourly averages don't all read as "0 %". */
-function avgPct(v: number): string {
-  return `${v < 10 ? dec.format(v) : Math.round(v)} %`;
-}
-
-function sessionsWord(n: number): string {
-  return n === 1 ? "session" : "sessions";
-}
-
 function bucketLabel(b: Bucket, range: Range): string {
   const s = new Date(b.start);
   const e = new Date(b.end);
-  if (range === "week" || range === "month") return `${weekday.format(s)} ${dm(s)}`;
+  const { wdm, hm } = f();
+  if (range === "week" || range === "month") return wdm.format(s);
   const span = `${hm.format(s)}–${hm.format(e)}`;
-  return range === "today" ? span : `${weekday.format(s)} ${dm(s)} ${span}`;
+  return range === "today" ? span : `${wdm.format(s)} ${span}`;
 }
 
 /** Sparse x-axis labels so they never collide at 284 px. */
 function tickLabel(b: Bucket, i: number, range: Range): string | null {
   const d = new Date(b.start);
+  const { weekday, hm, dm } = f();
   switch (range) {
     case "today":
     case "24h":
-      return d.getHours() % 6 === 0 ? `${d.getHours()}:00` : null;
+      return d.getHours() % 6 === 0 ? hm.format(d) : null;
     case "3d":
       return d.getHours() === 0 ? weekday.format(d) : null;
     case "week":
       return weekday.format(d);
     case "month":
-      return i % 7 === 2 ? dm(d) : null;
+      return i % 7 === 2 ? dm.format(d) : null;
   }
 }
 
@@ -100,7 +100,7 @@ export function buildHistoryPanel(root: HTMLElement, be: Backend, onBack: () => 
   let samples: HistorySample[] = [];
   let loaded = false;
 
-  const rangeCtl = segmented<Range>(RANGES, () => range, (v) => {
+  const rangeCtl = segmented<Range>(RANGES.map((r) => ({ value: r.value, label: t(r.key) })), () => range, (v) => {
     range = v;
     save("cu.history.range", v);
     sync();
@@ -108,8 +108,8 @@ export function buildHistoryPanel(root: HTMLElement, be: Backend, onBack: () => 
   });
   const metricCtl = segmented<Metric>(
     [
-      { value: "weekly", label: "Týdenní limit" },
-      { value: "session", label: "Session" },
+      { value: "weekly", label: t("metricWeekly") },
+      { value: "session", label: t("metricSession") },
     ],
     () => metric,
     (v) => {
@@ -129,8 +129,8 @@ export function buildHistoryPanel(root: HTMLElement, be: Backend, onBack: () => 
     h(
       "div",
       { class: "settings-head" },
-      h("button", { class: "icon-btn", "aria-label": "Zpět", title: "Zpět", onclick: onBack }, icon(ChevronLeft)),
-      h("h1", {}, "Historie spotřeby"),
+      h("button", { class: "icon-btn", "aria-label": t("back"), title: t("back"), onclick: onBack }, icon(ChevronLeft)),
+      h("h1", {}, t("historyTitle")),
     ),
     h("div", { class: "seg-stack" }, rangeCtl, metricCtl),
     body,
@@ -155,8 +155,8 @@ export function buildHistoryPanel(root: HTMLElement, be: Backend, onBack: () => 
         h(
           "div",
           { class: "chart-empty" },
-          h("div", { class: "c-title" }, "Zatím žádná historie"),
-          h("p", {}, "ClaudeUsage ukládá spotřebu při každé obnově. Graf se naplní, jak bude aplikace běžet."),
+          h("div", { class: "c-title" }, t("historyEmptyTitle")),
+          h("p", {}, t("historyEmptyBody")),
         ),
       );
       onResize();
@@ -168,22 +168,20 @@ export function buildHistoryPanel(root: HTMLElement, be: Backend, onBack: () => 
 
   function chart(series: Series): Node[] {
     const weekly = series.metric === "weekly";
-    const unit = weekly ? "týdenního limitu" : "vytížení session";
+    const unit = weekly ? t("metricWeekly") : t("metricSession");
     const avgText = series.average == null ? "–" : weekly ? `Ø ${avgPct(series.average)}` : pct(series.average);
-    const avgUnit = weekly
-      ? ` týdenního limitu za ${series.averageUnit === "hour" ? "hodinu" : "den"}`
-      : " průměrná session";
+    const avgUnit = ` ${weekly ? t(series.averageUnit === "hour" ? "perHour" : "perDay") : t("avgSession")}`;
     const peakAt = series.peak ? bucketLabel(series.peak, range) : null;
     const detail = weekly
-      ? [`Celkem ${pct(series.total)}`, peakAt && `nejvíc ${peakAt}`].filter(Boolean).join(" · ")
+      ? [t("total", { v: pct(series.total) }), peakAt && t("peakAt", { when: peakAt })].filter(Boolean).join(" · ")
       : series.sessions > 0
-        ? [`${series.sessions} ${sessionsWord(series.sessions)}`, peakAt && `nejvyšší ${peakAt}`].filter(Boolean).join(" · ")
-        : "Za období žádná session";
+        ? [t("sessionsCount", { n: series.sessions }), peakAt && t("highestAt", { when: peakAt })].filter(Boolean).join(" · ")
+        : t("noSessions");
     const stat = h(
       "div",
       { class: "chart-stat" },
       h("div", {}, h("span", { class: "chart-total" }, avgText), h("span", { class: "chart-unit" }, avgUnit)),
-      h("div", { class: "chart-peak" }, weekly && series.total === 0 ? "Za období bez spotřeby" : detail),
+      h("div", { class: "chart-peak" }, weekly && series.total === 0 ? t("noUsage") : detail),
     );
 
     const n = series.buckets.length;
@@ -195,7 +193,7 @@ export function buildHistoryPanel(root: HTMLElement, be: Backend, onBack: () => 
     const bw = Math.max(2, Math.min(24, slot - 2));
     const y = (v: number) => PAD.t + plotH - (v / max) * plotH;
 
-    const svg = el("svg", { viewBox: `0 0 ${W} ${HGT}`, class: "chart", role: "img", "aria-label": `${weekly ? "Spotřeba" : "Nejvyšší"} ${unit}, ${avgText}${avgUnit}` });
+    const svg = el("svg", { viewBox: `0 0 ${W} ${HGT}`, class: "chart", role: "img", "aria-label": `${unit}: ${avgText}${avgUnit}` });
     // Integer ticks only; a half tick like 2.5 % reads as noise.
     for (const v of Number.isInteger(max / 2) ? [0, max / 2, max] : [0, max]) {
       const gy = Math.round(y(v)) + 0.5;
@@ -241,7 +239,7 @@ export function buildHistoryPanel(root: HTMLElement, be: Backend, onBack: () => 
       active = i;
       bars.forEach((p, j) => p?.classList.toggle("dim", j !== i));
       const b = series.buckets[i];
-      const value = b.future ? "—" : b.covered || b.value > 0 ? pct(b.value) : "bez dat";
+      const value = b.future ? "—" : b.covered || b.value > 0 ? pct(b.value) : t("noData");
       tip.replaceChildren(h("span", { class: "tip-k" }, bucketLabel(b, range)), h("span", { class: "tip-v" }, value));
       tip.classList.add("on");
       const cx = ((PAD.l + i * slot + slot / 2) / W) * wrap.clientWidth;
@@ -273,14 +271,12 @@ export function buildHistoryPanel(root: HTMLElement, be: Backend, onBack: () => 
     const table = h(
       "table",
       { class: "sr-only" },
-      h("caption", {}, `Spotřeba ${unit}`),
-      ...series.buckets.filter((b) => !b.future).map((b) => h("tr", {}, h("th", {}, bucketLabel(b, range)), h("td", {}, b.covered || b.value > 0 ? pct(b.value) : "bez dat"))),
+      h("caption", {}, unit),
+      ...series.buckets.filter((b) => !b.future).map((b) => h("tr", {}, h("th", {}, bucketLabel(b, range)), h("td", {}, b.covered || b.value > 0 ? pct(b.value) : t("noData")))),
     );
 
-    const fromNote = series.historyFrom
-      ? `Historie od ${weekday.format(new Date(series.historyFrom))} ${dm(new Date(series.historyFrom))} ${hm.format(new Date(series.historyFrom))}. `
-      : "";
-    const note = h("div", { class: "chart-note" }, `${fromNote}Počítá se z dat, která ClaudeUsage uložil, když běžel.`);
+    const fromNote = series.historyFrom ? `${t("historyFrom", { when: f().full.format(new Date(series.historyFrom)) })} ` : "";
+    const note = h("div", { class: "chart-note" }, `${fromNote}${t("historyNote")}`);
     return [stat, wrap, note, table];
   }
 
